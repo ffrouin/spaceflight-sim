@@ -5,6 +5,8 @@
 import { ATMOSPHERE, isaAtmosphereAt } from './atmosphere-model.js';
 import { LAUNCH_PLATFORMS, latLonToEarthVector } from './launch-platforms.js';
 import { createLaunchWizard } from './launch-wizard.js';
+import { LAUNCH_VEHICLES } from './launch-vehicles.js';
+import { createRocketSystem } from './rocket-system.js';
 import { createCelestialSystem } from './celestial-system.js';
 import { createSimulationClock } from './simulation-clock.js';
 
@@ -16,10 +18,21 @@ const platformListNode = document.getElementById('platformList');
 const countrySelectNode = document.getElementById('countrySelect');
 const countryBenefitNode = document.getElementById('countryBenefit');
 const selectedPlatformNode = document.getElementById('selectedPlatform');
+const atmosphereAltitudeNode = document.getElementById('atmosphereAltitude');
+const airDensityNode = document.getElementById('airDensity');
+const airPressureNode = document.getElementById('airPressure');
+const airTemperatureNode = document.getElementById('airTemperature');
+const continueToRocketNode = document.getElementById('continueToRocket');
+const rocketPanelNode = document.getElementById('rocketPanel');
+const rocketListNode = document.getElementById('rocketList');
+const rocketInfoNode = document.getElementById('rocketInfo');
+const rocketComponentsNode = document.getElementById('rocketComponents');
+const separationButtonNode = document.getElementById('previewSeparation');
 
 // Expose the physical launch reference for the later wizard stages and review tooling.
 window.__ATMOSPHERE_MODEL = { constants: ATMOSPHERE, atAltitude: isaAtmosphereAt };
 window.__LAUNCH_PLATFORMS = LAUNCH_PLATFORMS;
+window.__LAUNCH_VEHICLES = LAUNCH_VEHICLES;
 
 function fail(message) {
   errorNode.textContent = message;
@@ -91,13 +104,46 @@ function followEarthTarget() {
   camera.target.copyFrom(focusNode?.getAbsolutePosition?.() || celestial.earth.getAbsolutePosition());
 }
 
+function updateLaunchAtmosphere(platform) {
+  const altitudeM = platform.elevationM ?? 0;
+  const atmosphere = isaAtmosphereAt(altitudeM);
+  atmosphereAltitudeNode.textContent = `${altitudeM.toLocaleString()} m MSL`;
+  airDensityNode.textContent = `${atmosphere.densityKgM3.toFixed(3)} kg/m³`;
+  airPressureNode.textContent = `${Math.round(atmosphere.pressurePa).toLocaleString()} Pa`;
+  airTemperatureNode.textContent = `${atmosphere.temperatureK.toFixed(2)} K · ${(atmosphere.temperatureK - 273.15).toFixed(1)} °C`;
+}
+
 const platformMarkerRoot = new BABYLON.TransformNode('launch platform marker root', scene);
 platformMarkerRoot.parent = celestial.earth;
 const launchWizard = createLaunchWizard({
   BABYLON, scene, earthRadiusScene: celestial.earthRadiusScene, platforms: LAUNCH_PLATFORMS,
   platformListNode, countrySelectNode, countryBenefitNode, selectedPlatformNode, statusNode, camera, markerRoot: platformMarkerRoot,
-  latLonToEarthVector
+  latLonToEarthVector,
+  onPlatformSelected: (platform, userInitiated) => {
+    updateLaunchAtmosphere(platform);
+    if (userInitiated) {
+      continueToRocketNode.disabled = false;
+      continueToRocketNode.textContent = 'Continue · choose a crewed rocket';
+      statusNode.textContent = `launch platform confirmed · ${platform.name}`;
+    }
+  }
 });
+const rocketSystem = createRocketSystem({
+  BABYLON, scene, rocketListNode, rocketInfoNode, rocketComponentsNode, separationButtonNode,
+  vehicleCatalog: LAUNCH_VEHICLES, camera, getSelectedPlatform: launchWizard.getSelectedPlatform, earth: celestial.earth
+});
+
+continueToRocketNode.addEventListener('click', () => {
+  const platform = launchWizard.getSelectedPlatform();
+  if (!platform) return;
+  rocketPanelNode.classList.remove('hidden');
+  const marker = launchWizard.platformMarkers.get(platform.id);
+  rocketSystem.focusGround(marker);
+  statusNode.textContent = `ground focus ready · select a crewed rocket for ${platform.name}`;
+  continueToRocketNode.textContent = 'Platform confirmed · rocket selection open';
+});
+
+updateLaunchAtmosphere(launchWizard.getSelectedPlatform());
 
 
 let textureReadyReported = false;
@@ -116,6 +162,7 @@ window.__BABYLON_ENGINE = engine;
 window.__SIMULATION_CLOCK = clock;
 window.__CELESTIAL_SYSTEM = celestial;
 window.__SCALE_MODEL = celestial.scaleModel;
+window.__ROCKET_SYSTEM = rocketSystem;
 window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); followEarthTarget(); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray() }; };
 window.__EARTH_WELCOME = {
   earth: celestial.earth,
@@ -130,8 +177,10 @@ window.__EARTH_WELCOME = {
   moonRadiusScene: celestial.moonRadiusScene,
   physicalRadiusM: ATMOSPHERE.earthMeanRadiusM,
   platformMarkers: launchWizard.platformMarkers,
+  rocketSystem,
   getSelectedPlatform: launchWizard.getSelectedPlatform,
-  getSelectedCountry: launchWizard.getSelectedCountry
+  getSelectedCountry: launchWizard.getSelectedCountry,
+  getSelectedRocket: rocketSystem.getSelectedVehicle
 };
 
 let lastFrameTime = performance.now();

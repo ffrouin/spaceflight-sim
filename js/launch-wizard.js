@@ -27,7 +27,7 @@ const PLATFORM_BENEFITS = Object.freeze({
   'rocket-lab-lc1': 'Open-ocean eastward corridor and southern latitude support for constellation and high-inclination missions.'
 });
 
-export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms, platformListNode, countrySelectNode, countryBenefitNode, selectedPlatformNode, statusNode, camera, markerRoot, latLonToEarthVector}) {
+export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms, platformListNode, countrySelectNode, countryBenefitNode, selectedPlatformNode, statusNode, camera, markerRoot, latLonToEarthVector, onPlatformSelected = () => {}}) {
   const platformMarkers = new Map();
   let selectedPlatform = null;
   let selectedCountry = '';
@@ -50,7 +50,7 @@ export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms,
       button.className = 'platform-option';
       button.dataset.platformId = platform.id;
       button.innerHTML = `<strong>${platform.name}</strong><span>${platform.type} · ${platform.operator}</span>`;
-      button.addEventListener('click', () => selectPlatform(platform));
+      button.addEventListener('click', () => selectPlatform(platform, true, true));
       platformListNode.appendChild(button);
     }
     if (!platforms.some(platform => platform.id === selectedPlatform?.id && platform.country === country)) {
@@ -61,7 +61,7 @@ export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms,
     }
   }
 
-  function selectPlatform(platform, focus = true) {
+  function selectPlatform(platform, focus = true, userInitiated = false) {
     selectedPlatform = platform;
     if (selectedCountry !== platform.country) renderCountry(platform.country);
     for (const [id, marker] of platformMarkers) {
@@ -78,6 +78,7 @@ export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms,
       camera.setTarget(target);
       camera.radius = 10;
     }
+    onPlatformSelected(platform, userInitiated);
   }
 
   for (const platform of platforms) {
@@ -98,7 +99,7 @@ export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms,
   scene.onPointerObservable.add(pointerInfo => {
     if (pointerInfo.type !== BABYLON.PointerEventTypes.POINTERPICK) return;
     const platform = platforms.find(item => item.id === pointerInfo.pickInfo?.pickedMesh?.metadata?.platformId);
-    if (platform) selectPlatform(platform);
+    if (platform) selectPlatform(platform, true, true);
   });
 
   renderCountry(countries[0]);
