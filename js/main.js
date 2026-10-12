@@ -297,6 +297,7 @@ function restoreMoonFlightView() {
 launchButtonNode.addEventListener('click', () => {
   if (!rocketSystem.getSelectedVehicle?.()) return;
   setLaunchTimeRate(1);
+  launchWizard.setMarkersVisible(false);
   prepareLaunchEnvironment();
   rocketDockNode.classList.add('hidden');
   flightTelemetryNode.classList.remove('hidden');

@@ -82,6 +82,10 @@ export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms,
     onPlatformSelected(platform, userInitiated);
   }
 
+  function setMarkersVisible(visible) {
+    for (const marker of platformMarkers.values()) marker.setEnabled(visible);
+  }
+
   for (const platform of platforms) {
     const markerDiameter = Math.max(.4, earthRadiusScene * .006);
     const marker = BABYLON.MeshBuilder.CreateSphere(`launch platform · ${platform.id}`, {diameter: markerDiameter, segments: 16}, scene);
@@ -106,5 +110,5 @@ export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms,
   });
 
   renderCountry(countries[0]);
-  return {platformMarkers, getSelectedPlatform: () => selectedPlatform, getSelectedCountry: () => selectedCountry, selectPlatform, renderCountry, platformBenefit};
+  return {platformMarkers, getSelectedPlatform: () => selectedPlatform, getSelectedCountry: () => selectedCountry, selectPlatform, renderCountry, platformBenefit, setMarkersVisible};
 }
