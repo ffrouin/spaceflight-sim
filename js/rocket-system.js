@@ -22,6 +22,9 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
   const previewCamera = previewScene ? new BABYLON.ArcRotateCamera('tablet preview camera', -Math.PI * .58, Math.PI * .37, 5, new BABYLON.Vector3(0, 1.5, 0), previewScene) : null;
   const previewRoot = previewScene ? new BABYLON.TransformNode('tablet rocket preview assembly', previewScene) : null;
   const previewComponentNodes = new Map();
+  const previewDetachedStates = new Map();
+  const previewGravity = 2.5;
+  let previewClockSeconds = 0;
   if (previewScene) {
     previewScene.clearColor = new BABYLON.Color4(.005, .012, .028, 1);
     previewCamera.attachControl(previewCanvas, true);
@@ -33,6 +36,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     const rim = new BABYLON.DirectionalLight('tablet preview rim', new BABYLON.Vector3(-.5, -.8, -.4), previewScene);
     rim.intensity = 1.2;
   }
+  if (previewScene) window.setInterval(() => stepPreview(1 / 30), 33);
   let selectedVehicle = null;
   let rocketRoot = null;
   let componentNodes = new Map();
@@ -88,8 +92,10 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
 
   function clearPreview() {
     if (!previewRoot) return;
-    previewRoot.getChildMeshes().forEach(mesh => mesh.dispose(false, true));
+    for (const node of previewComponentNodes.values()) node.dispose(false, true);
     previewComponentNodes.clear();
+    previewDetachedStates.clear();
+    previewClockSeconds = 0;
   }
 
   function renderPreview(vehicle) {
@@ -122,11 +128,44 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     previewScene.render();
   }
 
-  function updatePreviewSeparations(seconds) {
-    for (const component of selectedVehicle?.components || []) {
-      const node = previewComponentNodes.get(component.id);
-      if (node && component.detachable && component.detachAtS != null) node.setEnabled(seconds < component.detachAtS);
+  function stepPreview(deltaSeconds) {
+    if (!previewScene || previewDetachedStates.size === 0) return;
+    previewClockSeconds += deltaSeconds;
+    for (const state of previewDetachedStates.values()) {
+      state.velocity.y -= previewGravity * deltaSeconds;
+      state.position.addInPlace(state.velocity.scale(deltaSeconds));
+      state.node.position.copyFrom(state.position);
+      state.node.rotation.x += deltaSeconds * .7;
+      state.node.rotation.z += deltaSeconds * .45;
     }
+    previewScene.render();
+  }
+
+  function updatePreviewSeparations(seconds) {
+    for (const [index, component] of (selectedVehicle?.components || []).entries()) {
+      const node = previewComponentNodes.get(component.id);
+      if (!node || !component.detachable || component.detachAtS == null) continue;
+      const shouldDetach = seconds >= component.detachAtS;
+      const state = previewDetachedStates.get(component.id);
+      if (shouldDetach && !state) {
+        const initialPosition = node.position.clone();
+        node.parent = null;
+        node.position.copyFrom(initialPosition);
+        node.setEnabled(true);
+        const angle = index * 1.7;
+        previewDetachedStates.set(component.id, {
+          node,
+          position: initialPosition,
+          velocity: new BABYLON.Vector3(Math.cos(angle) * .55, .85, Math.sin(angle) * .55),
+          detachAtS: component.detachAtS
+        });
+      } else if (!shouldDetach && state) {
+        node.parent = previewRoot;
+        node.position.copyFrom(state.position);
+        previewDetachedStates.delete(component.id);
+      }
+    }
+    if (tabletStatusNode && previewDetachedStates.size) tabletStatusNode.textContent = `GRAVITY PREVIEW · ${Math.round(seconds)} S`;
     if (previewScene) previewScene.render();
   }
 
@@ -245,5 +284,5 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     buildRocket(vehicle);
   }));
 
-  return {buildRocket, focusGround, setFlightSeconds, resizePreview, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
+  return {buildRocket, focusGround, setFlightSeconds, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
 }
