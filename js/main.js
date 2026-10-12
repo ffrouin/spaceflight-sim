@@ -23,6 +23,8 @@ const airDensityNode = document.getElementById('airDensity');
 const airPressureNode = document.getElementById('airPressure');
 const airTemperatureNode = document.getElementById('airTemperature');
 const continueToRocketNode = document.getElementById('continueToRocket');
+const launchPanelNode = document.getElementById('launchPanel');
+const rocketDockNode = document.getElementById('rocketDock');
 const rocketPanelNode = document.getElementById('rocketPanel');
 const rocketListNode = document.getElementById('rocketList');
 const rocketInfoNode = document.getElementById('rocketInfo');
@@ -140,6 +142,8 @@ const rocketSystem = createRocketSystem({
 continueToRocketNode.addEventListener('click', () => {
   const platform = launchWizard.getSelectedPlatform();
   if (!platform) return;
+  launchPanelNode.classList.add('hidden');
+  rocketDockNode.classList.remove('hidden');
   rocketPanelNode.classList.remove('hidden');
   const marker = launchWizard.platformMarkers.get(platform.id);
   rocketSystem.focusGround(marker);
