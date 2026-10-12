@@ -30,6 +30,8 @@ const rocketListNode = document.getElementById('rocketList');
 const rocketInfoNode = document.getElementById('rocketInfo');
 const rocketComponentsNode = document.getElementById('rocketComponents');
 const separationButtonNode = document.getElementById('previewSeparation');
+const rocketPreviewCanvas = document.getElementById('rocketPreviewCanvas');
+const tabletStatusNode = document.getElementById('tabletStatus');
 
 // Expose the physical launch reference for the later wizard stages and review tooling.
 window.__ATMOSPHERE_MODEL = { constants: ATMOSPHERE, atAltitude: isaAtmosphereAt };
@@ -136,7 +138,8 @@ const launchWizard = createLaunchWizard({
 });
 const rocketSystem = createRocketSystem({
   BABYLON, scene, rocketListNode, rocketInfoNode, rocketComponentsNode, separationButtonNode,
-  vehicleCatalog: LAUNCH_VEHICLES, camera, getSelectedPlatform: launchWizard.getSelectedPlatform, earth: celestial.earth
+  vehicleCatalog: LAUNCH_VEHICLES, camera, getSelectedPlatform: launchWizard.getSelectedPlatform, earth: celestial.earth,
+  previewCanvas: rocketPreviewCanvas, tabletStatusNode
 });
 
 continueToRocketNode.addEventListener('click', () => {
@@ -144,6 +147,7 @@ continueToRocketNode.addEventListener('click', () => {
   if (!platform) return;
   launchPanelNode.classList.add('hidden');
   rocketDockNode.classList.remove('hidden');
+  rocketSystem.resizePreview();
   rocketPanelNode.classList.remove('hidden');
   const marker = launchWizard.platformMarkers.get(platform.id);
   rocketSystem.focusGround(marker);

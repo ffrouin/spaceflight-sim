@@ -14,35 +14,51 @@ const COLORS = Object.freeze({
   'interstage': new BABYLON.Color3(.25, .3, .36)
 });
 
-export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNode, rocketComponentsNode, separationButtonNode, vehicleCatalog, camera, getSelectedPlatform, earth}) {
+export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNode, rocketComponentsNode, separationButtonNode, vehicleCatalog, camera, getSelectedPlatform, earth, previewCanvas, tabletStatusNode}) {
   const visualBoost = 5_000;
   const metersToScene = (earthRadiusScene, meters) => (earthRadiusScene * 2 / (2 * 6_371_000)) * meters * visualBoost;
+  const previewEngine = previewCanvas ? new BABYLON.Engine(previewCanvas, true, {preserveDrawingBuffer: false, stencil: true}, true) : null;
+  const previewScene = previewEngine ? new BABYLON.Scene(previewEngine) : null;
+  const previewCamera = previewScene ? new BABYLON.ArcRotateCamera('tablet preview camera', -Math.PI * .58, Math.PI * .37, 5, new BABYLON.Vector3(0, 1.5, 0), previewScene) : null;
+  const previewRoot = previewScene ? new BABYLON.TransformNode('tablet rocket preview assembly', previewScene) : null;
+  const previewComponentNodes = new Map();
+  if (previewScene) {
+    previewScene.clearColor = new BABYLON.Color4(.005, .012, .028, 1);
+    previewCamera.attachControl(previewCanvas, true);
+    previewCamera.lowerRadiusLimit = 1;
+    previewCamera.upperRadiusLimit = 20;
+    previewScene.activeCamera = previewCamera;
+    const key = new BABYLON.HemisphericLight('tablet preview fill', new BABYLON.Vector3(0, 1, 0), previewScene);
+    key.intensity = .55;
+    const rim = new BABYLON.DirectionalLight('tablet preview rim', new BABYLON.Vector3(-.5, -.8, -.4), previewScene);
+    rim.intensity = 1.2;
+  }
   let selectedVehicle = null;
   let rocketRoot = null;
   let componentNodes = new Map();
   let orbitGuide = null;
   let flightSeconds = 0;
 
-  function materialFor(kind, id) {
-    const material = new BABYLON.StandardMaterial(`rocket material · ${id}`, scene);
+  function materialFor(kind, id, targetScene = scene) {
+    const material = new BABYLON.StandardMaterial(`rocket material · ${id} · ${targetScene === scene ? 'world' : 'tablet'}`, targetScene);
     material.diffuseColor = COLORS[kind] || new BABYLON.Color3(.55, .58, .62);
     material.metallic = kind === 'crew-capsule' ? .35 : .18;
     material.roughness = .62;
     return material;
   }
 
-  function makeComponentMesh(component, scale) {
+  function makeComponentMesh(component, scale, targetScene = scene) {
     const diameter = Math.max(.012, component.diameterM * scale);
     const height = Math.max(.018, component.heightM * scale);
     let mesh;
     if (component.kind === 'crew-capsule' || component.kind === 'orbital-module') {
-      mesh = BABYLON.MeshBuilder.CreateCylinder(component.name, {diameterTop: diameter * .68, diameterBottom: diameter, height, tessellation: 32}, scene);
+      mesh = BABYLON.MeshBuilder.CreateCylinder(component.name, {diameterTop: diameter * .68, diameterBottom: diameter, height, tessellation: 32}, targetScene);
     } else if (component.kind === 'escape-tower' || component.kind === 'escape-system') {
-      mesh = BABYLON.MeshBuilder.CreateCylinder(component.name, {diameter: diameter * .34, height, tessellation: 20}, scene);
+      mesh = BABYLON.MeshBuilder.CreateCylinder(component.name, {diameter: diameter * .34, height, tessellation: 20}, targetScene);
     } else {
-      mesh = BABYLON.MeshBuilder.CreateCylinder(component.name, {diameter, height, tessellation: 32}, scene);
+      mesh = BABYLON.MeshBuilder.CreateCylinder(component.name, {diameter, height, tessellation: 32}, targetScene);
     }
-    mesh.material = materialFor(component.kind, component.id);
+    mesh.material = materialFor(component.kind, component.id, targetScene);
     mesh.metadata = {...component, physicalHeightM: component.heightM, physicalDiameterM: component.diameterM, visualBoost};
     mesh.isPickable = false;
     return mesh;
@@ -63,6 +79,60 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     if (!platform) return null;
     const marker = window.__EARTH_WELCOME?.platformMarkers?.get(platform.id);
     return marker || null;
+  }
+
+  function orderedComponents(vehicle) {
+    const order = {'core-stage': 1, 'upper-stage': 2, 'interstage': 3, 'crew-capsule': 4, 'orbital-module': 5, 'escape-system': 6, 'escape-tower': 7};
+    return vehicle.components.filter(item => item.kind !== 'booster').sort((a, b) => (order[a.kind] || 4) - (order[b.kind] || 4));
+  }
+
+  function clearPreview() {
+    if (!previewRoot) return;
+    previewRoot.getChildMeshes().forEach(mesh => mesh.dispose(false, true));
+    previewComponentNodes.clear();
+  }
+
+  function renderPreview(vehicle) {
+    if (!previewScene || !previewRoot || !previewCamera) return;
+    clearPreview();
+    const scale = Math.min(.032, 3.4 / vehicle.heightM);
+    const boosters = vehicle.components.filter(item => item.kind === 'booster');
+    let cursor = 0;
+    for (const component of orderedComponents(vehicle)) {
+      const node = makeComponentMesh(component, scale, previewScene);
+      node.parent = previewRoot;
+      const height = Math.max(.018, component.heightM * scale);
+      node.position.y = cursor + height / 2;
+      cursor += height;
+      previewComponentNodes.set(component.id, node);
+    }
+    boosters.forEach((component, index) => {
+      const node = makeComponentMesh(component, scale, previewScene);
+      node.parent = previewRoot;
+      const height = Math.max(.018, component.heightM * scale);
+      const angle = index / Math.max(1, boosters.length) * Math.PI * 2;
+      const ring = Math.max(.04, component.diameterM * scale * .82);
+      node.position.set(Math.cos(angle) * ring, height / 2, Math.sin(angle) * ring);
+      previewComponentNodes.set(component.id, node);
+    });
+    const center = cursor / 2;
+    previewCamera.setTarget(new BABYLON.Vector3(0, center, 0));
+    previewCamera.radius = Math.max(4.2, cursor * 1.65);
+    if (tabletStatusNode) tabletStatusNode.textContent = vehicle.id.replaceAll('-', ' ').toUpperCase();
+    previewScene.render();
+  }
+
+  function updatePreviewSeparations(seconds) {
+    for (const component of selectedVehicle?.components || []) {
+      const node = previewComponentNodes.get(component.id);
+      if (node && component.detachable && component.detachAtS != null) node.setEnabled(seconds < component.detachAtS);
+    }
+    if (previewScene) previewScene.render();
+  }
+
+  function resizePreview() {
+    if (previewEngine) previewEngine.resize();
+    if (previewScene) previewScene.render();
   }
 
   function buildRocket(vehicle) {
@@ -130,6 +200,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     rocketRoot.metadata = {vehicleId: vehicle.id, visualBoost, heightM: vehicle.heightM, diameterM: vehicle.diameterM, visualHeightScene: vehicle.heightM * scale, visualDiameterScene: vehicle.diameterM * scale, flightProfile: {firstPhase: 'ascent through atmosphere', atmosphereTopAltitudeKm: 100, secondPhase: 'circular low Earth orbit', stableOrbitAltitudeKm: 200}};
     separationButtonNode.disabled = vehicle.components.every(item => !item.detachable);
     renderVehicleInfo(vehicle);
+    renderPreview(vehicle);
     focusGround(marker, rocketRoot.metadata.visualHeightScene);
   }
 
@@ -158,6 +229,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     }
     separationButtonNode.disabled = !selectedVehicle || !selectedVehicle.components.some(item => item.detachable && item.detachAtS > flightSeconds);
     separationButtonNode.textContent = separationButtonNode.disabled ? 'All planned separations previewed' : `Preview next separation · ${Math.round(nextSeparationTime() - flightSeconds)} s`;
+    updatePreviewSeparations(flightSeconds);
   }
 
   function nextSeparationTime() {
@@ -173,5 +245,5 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     buildRocket(vehicle);
   }));
 
-  return {buildRocket, focusGround, setFlightSeconds, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
+  return {buildRocket, focusGround, setFlightSeconds, resizePreview, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
 }
