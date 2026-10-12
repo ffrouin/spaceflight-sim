@@ -67,9 +67,10 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   const earthClouds = BABYLON.MeshBuilder.CreateSphere('Earth cloud layer', {diameter: earthRadiusScene * 2.018, segments: 96}, scene);
   earthClouds.parent = earth;
   const earthCloudMaterial = new BABYLON.StandardMaterial('Earth cloud layer material', scene);
-  earthCloudMaterial.diffuseTexture = new BABYLON.Texture('assets/solar-system-scope-earth-clouds-2k.jpg', scene, true, false);
+  // The source map drives opacity; a white untextured surface keeps clouds bright instead of tinting them black.
   earthCloudMaterial.opacityTexture = new BABYLON.Texture('assets/solar-system-scope-earth-clouds-2k-alpha.png', scene, true, false);
   earthCloudMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
+  earthCloudMaterial.emissiveColor = new BABYLON.Color3(.92, .92, .92);
   earthCloudMaterial.alpha = .72;
   earthCloudMaterial.backFaceCulling = false;
   earthCloudMaterial.disableLighting = true;
@@ -186,7 +187,7 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
     const earthSpin = simulationSeconds / earthRotationPeriodSeconds * Math.PI * 2;
     earthOrbitRoot.rotation.y = earthAngle;
     earth.rotation.y = earthSpin;
-    earthClouds.rotation.y = earthSpin * 1.035;
+    earthClouds.rotation.y = earthSpin * 1.002;
     nightGlow.rotation.y = earthSpin * .88;
     earthGroundMarker.rotation.z = earthSpin * .15;
     moon.position.set(Math.cos(moonAngle) * moonOrbitRadius, 0.16 * Math.sin(moonAngle * .5), Math.sin(moonAngle) * moonOrbitRadius);
@@ -217,6 +218,6 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
       solarDistanceIsVisuallyCompressed: true
     },
     update,
-    texturesReady: () => Boolean(earthMaterial.albedoTexture?.isReady() && earthMaterial.bumpTexture?.isReady() && earthMaterial.metallicTexture?.isReady() && earthCloudMaterial.diffuseTexture?.isReady() && earthCloudMaterial.opacityTexture?.isReady() && moonMaterial.albedoTexture?.isReady())
+    texturesReady: () => Boolean(earthMaterial.albedoTexture?.isReady() && earthMaterial.bumpTexture?.isReady() && earthMaterial.metallicTexture?.isReady() && earthCloudMaterial.opacityTexture?.isReady() && moonMaterial.albedoTexture?.isReady())
   };
 }

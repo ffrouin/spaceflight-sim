@@ -10,7 +10,7 @@
 - `rocket-system.js` — Babylon assembly, ground focus, live flight trace, tangent orbital insertion, and staged-component preview.
 - `flight-view.js` — lightweight live-linked onboard camera monitor for the telemetry panel.
 - `assets/solar-system-scope-sun-2k.jpg` and `assets/solar-system-scope-moon-2k.jpg` — Solar System Scope Sun/Moon maps, stored locally for stable Babylon loading; attribution is required under the source pack's CC BY 4.0 terms.
-- `assets/solar-system-scope-earth-clouds-2k.jpg` — Solar System Scope Earth cloud map rendered on a transparent, independently rotating shell; `...-alpha.png` is a local luminance-derived opacity mask for the JPEG.
+- `assets/solar-system-scope-earth-clouds-2k.jpg` — Solar System Scope Earth cloud map rendered as a bright white transparent shell rotating at `1.002×` Earth’s rotation; `...-alpha.png` is a local luminance-derived opacity mask for the JPEG.
 
 ## Scale model
 
