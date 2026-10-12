@@ -31,7 +31,7 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   sunMaterial.disableLighting = true;
   sun.material = sunMaterial;
 
-  const earthOrbit = BABYLON.MeshBuilder.CreateTorus('Earth solar orbit guide', {diameter: earthOrbitRadius * 2, thickness: .018, tessellation: 160}, scene);
+  const earthOrbit = BABYLON.MeshBuilder.CreateTorus('Earth solar orbit guide', {diameter: earthOrbitRadius * 2, thickness: Math.max(.018, earthRadiusScene * .0012), tessellation: 160}, scene);
   earthOrbit.parent = solarRoot;
   const earthOrbitMaterial = new BABYLON.StandardMaterial('Earth orbit guide material', scene);
   earthOrbitMaterial.emissiveColor = new BABYLON.Color3(.1, .42, .75);
@@ -104,7 +104,7 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   moon.material = moonMaterial;
   moon.isPickable = false;
 
-  const moonOrbit = BABYLON.MeshBuilder.CreateTorus('Moon orbit guide', {diameter: moonOrbitRadius * 2, thickness: .014, tessellation: 128}, scene);
+  const moonOrbit = BABYLON.MeshBuilder.CreateTorus('Moon orbit guide', {diameter: moonOrbitRadius * 2, thickness: Math.max(.014, earthRadiusScene * .003), tessellation: 128}, scene);
   moonOrbit.parent = moonOrbitRoot;
   const moonOrbitMaterial = new BABYLON.StandardMaterial('Moon orbit guide material', scene);
   moonOrbitMaterial.emissiveColor = new BABYLON.Color3(.6, .66, .78);

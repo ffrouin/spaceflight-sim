@@ -21,6 +21,8 @@
 - Earth–Sun physical distance: 1 AU (`23,481.07×` Earth radius)
 - Rocket component rendering: a `5,000×` readability boost is applied only to launcher meshes; physical dimensions remain authoritative in the vehicle catalog, while Earth size, atmosphere thickness, and the 200 km LEO target remain separate diagnostics.
 - First flight phase: ascent through a 100 km atmosphere reference layer; second phase: stable circular low Earth orbit at 200 km, shown by the planned LEO guide.
+- Launch-platform markers scale with the enlarged Earth (`0.6%` of Earth radius) so the geographic map remains pickable and visible.
+- Earth and Moon orbit guides scale their line thickness with Earth radius instead of retaining sub-pixel fixed widths.
 
 - Earth axial tilt: `23.439°`
 - Moon orbital inclination: `5.145°`

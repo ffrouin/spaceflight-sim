@@ -76,13 +76,14 @@ export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms,
     if (focus) {
       const target = platformMarkers.get(platform.id).getAbsolutePosition();
       camera.setTarget(target);
-      camera.radius = 10;
+      camera.radius = Math.max(24, earthRadiusScene * .18);
     }
     onPlatformSelected(platform, userInitiated);
   }
 
   for (const platform of platforms) {
-    const marker = BABYLON.MeshBuilder.CreateSphere(`launch platform · ${platform.id}`, {diameter: .075, segments: 16}, scene);
+    const markerDiameter = Math.max(.4, earthRadiusScene * .006);
+    const marker = BABYLON.MeshBuilder.CreateSphere(`launch platform · ${platform.id}`, {diameter: markerDiameter, segments: 16}, scene);
     marker.parent = markerRoot;
     marker.position.copyFrom(latLonToEarthVector(BABYLON, platform.lat, platform.lon, earthRadiusScene * 1.018));
     marker.isPickable = true;
