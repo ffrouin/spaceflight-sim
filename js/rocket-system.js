@@ -43,6 +43,8 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
   let orbitGuide = null;
   let flightSeconds = 0;
   let launchState = null;
+  let flightTrace = null;
+  let flightTracePoints = [];
 
   function materialFor(kind, id, targetScene = scene) {
     const material = new BABYLON.StandardMaterial(`rocket material · ${id} · ${targetScene === scene ? 'world' : 'tablet'}`, targetScene);
@@ -72,8 +74,11 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
   function clearRocket() {
     if (rocketRoot) rocketRoot.dispose(false, true);
     if (orbitGuide) orbitGuide.dispose(false, true);
+    if (flightTrace) flightTrace.dispose(false, true);
     rocketRoot = null;
     orbitGuide = null;
+    flightTrace = null;
+    flightTracePoints = [];
     launchState = null;
     componentNodes = new Map();
     separationButtonNode.disabled = true;
@@ -306,6 +311,10 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       speedKmS: 0,
       previousPosition: startPosition.clone()
     };
+    flightTracePoints = [startPosition.clone()];
+    flightTrace = BABYLON.MeshBuilder.CreateLines('live launch flight trace', {points: flightTracePoints, colors: flightTracePoints.map(() => new BABYLON.Color4(.25, .85, 1, .9))}, scene);
+    flightTrace.parent = earth;
+    flightTrace.metadata = {traceType: 'live-launch-flight', phase: 'ground-to-leo'};
     if (launchButtonNode) {
       launchButtonNode.disabled = true;
       launchButtonNode.textContent = 'Launch sequence active';
@@ -345,6 +354,12 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     state.radiusKm = radius * 6371 / state.earthRadiusScene;
     state.altitudeKm = state.radiusKm - 6371;
     setRadialPose(position);
+    if (!flightTracePoints.length || BABYLON.Vector3.Distance(flightTracePoints[flightTracePoints.length - 1], position) > 2) {
+      flightTracePoints.push(position.clone());
+      flightTrace = BABYLON.MeshBuilder.CreateLines('live launch flight trace', {points: flightTracePoints, colors: flightTracePoints.map(() => new BABYLON.Color4(.25, .85, 1, .9)), instance: flightTrace}, scene);
+      flightTrace.parent = earth;
+      flightTrace.metadata = {traceType: 'live-launch-flight', pointCount: flightTracePoints.length, phase: state.phase};
+    }
     setFlightSeconds(Math.max(0, state.elapsed * 12));
     if (phase === 'stable-leo' && !state.orbitReported) {
       state.orbitReported = true;
@@ -380,5 +395,5 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     buildRocket(vehicle);
   }));
 
-  return {buildRocket, focusGround, focusRocket, setFlightSeconds, launchToOrbit, stepLaunch, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getLaunchState: () => launchState, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
+  return {buildRocket, focusGround, focusRocket, setFlightSeconds, launchToOrbit, stepLaunch, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getFlightTrace: () => ({mesh: flightTrace, pointCount: flightTracePoints.length, points: flightTracePoints.map(point => point.asArray())}), getLaunchState: () => launchState, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
 }

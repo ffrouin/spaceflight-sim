@@ -7,6 +7,7 @@ import { LAUNCH_PLATFORMS, latLonToEarthVector } from './launch-platforms.js';
 import { createLaunchWizard } from './launch-wizard.js';
 import { LAUNCH_VEHICLES } from './launch-vehicles.js';
 import { createRocketSystem } from './rocket-system.js';
+import { createFlightView } from './flight-view.js';
 import { createCelestialSystem } from './celestial-system.js';
 import { createSimulationClock } from './simulation-clock.js';
 
@@ -39,7 +40,9 @@ const telemetryTimeNode = document.getElementById('telemetryTime');
 const telemetryAltitudeNode = document.getElementById('telemetryAltitude');
 const telemetrySpeedNode = document.getElementById('telemetrySpeed');
 const telemetryRadiusNode = document.getElementById('telemetryRadius');
+const telemetryTraceNode = document.getElementById('telemetryTrace');
 const telemetryNoteNode = document.getElementById('telemetryNote');
+const flightViewCanvas = document.getElementById('flightViewCanvas');
 
 // Expose the physical launch reference for the later wizard stages and review tooling.
 window.__ATMOSPHERE_MODEL = { constants: ATMOSPHERE, atAltitude: isaAtmosphereAt };
@@ -155,6 +158,7 @@ const rocketSystem = createRocketSystem({
   vehicleCatalog: LAUNCH_VEHICLES, camera, getSelectedPlatform: launchWizard.getSelectedPlatform, earth: celestial.earth,
   previewCanvas: rocketPreviewCanvas, tabletStatusNode
 });
+const flightView = createFlightView({BABYLON, canvas: flightViewCanvas});
 
 continueToRocketNode.addEventListener('click', () => {
   const platform = launchWizard.getSelectedPlatform();
@@ -186,7 +190,9 @@ function updateFlightTelemetry() {
   telemetryAltitudeNode.textContent = `${Math.max(0, state.altitudeKm).toFixed(1)} km`;
   telemetrySpeedNode.textContent = `${state.speedKmS.toFixed(3)} km/s`;
   telemetryRadiusNode.textContent = `${state.radiusKm.toFixed(1)} km`;
-  telemetryNoteNode.textContent = state.phase === 'stable-leo' ? 'Earth–Moon view restored; vehicle remains in low Earth orbit.' : 'Camera locked to the launch vehicle.';
+  telemetryTraceNode.textContent = `${rocketSystem.getFlightTrace?.().pointCount || 0} points`;
+  flightView.update(state);
+  telemetryNoteNode.textContent = state.phase === 'stable-leo' ? 'Onboard camera active. Earth–Moon view restored; vehicle remains in low Earth orbit.' : 'Onboard camera active. Live trace marks the flown ground-to-LEO path.';
 }
 
 function restoreMoonFlightView() {
@@ -203,6 +209,7 @@ launchButtonNode.addEventListener('click', () => {
   prepareLaunchEnvironment();
   rocketDockNode.classList.add('hidden');
   flightTelemetryNode.classList.remove('hidden');
+  flightView.resize();
   const started = rocketSystem.launchToOrbit({
     onPhaseChange: phase => {
       const labels = {
@@ -279,4 +286,4 @@ function renderFrame() {
 renderFrame();
 window.__SIMULATION_TIMER = window.setInterval(renderFrame, 1000 / 60);
 
-window.addEventListener('resize', () => engine.resize());
+window.addEventListener('resize', () => { engine.resize(); flightView.resize(); });
