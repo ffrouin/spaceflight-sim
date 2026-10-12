@@ -4,6 +4,8 @@
 
 import { ATMOSPHERE, isaAtmosphereAt } from './atmosphere-model.js';
 import { LAUNCH_PLATFORMS, latLonToEarthVector } from './launch-platforms.js';
+import { createLaunchWizard } from './launch-wizard.js';
+import { createSunLighting } from './sun-lighting.js';
 import { createCelestialSystem } from './celestial-system.js';
 import { createSimulationClock } from './simulation-clock.js';
 
@@ -12,6 +14,8 @@ const statusNode = document.getElementById('sceneStatus');
 const assetNode = document.getElementById('assetStatus');
 const errorNode = document.getElementById('error');
 const platformListNode = document.getElementById('platformList');
+const countrySelectNode = document.getElementById('countrySelect');
+const countryBenefitNode = document.getElementById('countryBenefit');
 const selectedPlatformNode = document.getElementById('selectedPlatform');
 
 // Expose the physical launch reference for the later wizard stages and review tooling.
@@ -76,6 +80,13 @@ function createStars() {
 
 createStars();
 const celestial = createCelestialSystem({ BABYLON, scene, earthRadiusScene: 3 });
+let sunPresentation;
+try {
+  sunPresentation = createSunLighting({ BABYLON, scene, sunMesh: celestial.sun, sunLight, atmosphereMaterial: celestial.atmosphere.material });
+} catch (error) {
+  window.__SUN_LIGHTING_ERROR = error?.stack || String(error);
+  console.error('Sun lighting setup failed', error);
+}
 const clock = createSimulationClock({ timeScale: 3600 }); // 1 real second advances 1 simulated hour for visible system motion.
 celestial.update(0);
 earthTargetFix();
@@ -85,64 +96,14 @@ function earthTargetFix() {
   camera.setTarget(celestial.earth.getAbsolutePosition());
 }
 
-// Launch markers are children of Earth, so they rotate with the textured globe and stay geographically attached.
 const platformMarkerRoot = new BABYLON.TransformNode('launch platform marker root', scene);
 platformMarkerRoot.parent = celestial.earth;
-const platformMarkers = new Map();
-let selectedPlatform = null;
+const launchWizard = createLaunchWizard({
+  BABYLON, scene, earthRadiusScene: celestial.earthRadiusScene, platforms: LAUNCH_PLATFORMS,
+  platformListNode, countrySelectNode, countryBenefitNode, selectedPlatformNode, statusNode, camera, markerRoot: platformMarkerRoot,
+  latLonToEarthVector
+});
 
-function selectLaunchPlatform(platform, focus = true) {
-  selectedPlatform = platform;
-  for (const [id, marker] of platformMarkers) {
-    const active = id === platform.id;
-    marker.material.emissiveColor = active ? new BABYLON.Color3(0.3, 1, 0.68) : new BABYLON.Color3(0.08, 0.55, 0.95);
-    marker.scaling.setAll(active ? 1.55 : 1);
-    marker.metadata.selected = active;
-  }
-  document.querySelectorAll('.platform-option').forEach(button => button.classList.toggle('selected', button.dataset.platformId === platform.id));
-  selectedPlatformNode.innerHTML = `<strong>${platform.name}</strong><div>${platform.country} · ${platform.type}<br>${platform.operator}<br>Coordinates: ${platform.lat.toFixed(4)}°, ${platform.lon.toFixed(4)}° · ${platform.source}</div>`;
-  statusNode.textContent = `launch platform selected · ${platform.name}`;
-  if (focus) {
-    const target = platformMarkers.get(platform.id).getAbsolutePosition();
-    camera.setTarget(target);
-    camera.radius = 6.8;
-  }
-}
-
-function createLaunchPlatformMarkers() {
-  for (const platform of LAUNCH_PLATFORMS) {
-    const marker = BABYLON.MeshBuilder.CreateSphere(`launch platform · ${platform.id}`, { diameter: 0.075, segments: 16 }, scene);
-    marker.parent = platformMarkerRoot;
-    marker.position.copyFrom(latLonToEarthVector(BABYLON, platform.lat, platform.lon, celestial.earthRadiusScene * 1.018));
-    marker.isPickable = true;
-    marker.metadata = { platformId: platform.id, selected: false, label: platform.name };
-    const material = new BABYLON.StandardMaterial(`launch platform material · ${platform.id}`, scene);
-    material.diffuseColor = new BABYLON.Color3(0.1, 0.65, 1);
-    material.emissiveColor = new BABYLON.Color3(0.08, 0.55, 0.95);
-    material.disableLighting = true;
-    marker.material = material;
-    platformMarkers.set(platform.id, marker);
-
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'platform-option';
-    button.dataset.platformId = platform.id;
-    button.innerHTML = `<strong>${platform.name}</strong><span>${platform.country} · ${platform.type}</span>`;
-    button.addEventListener('click', () => selectLaunchPlatform(platform));
-    platformListNode.appendChild(button);
-  }
-
-  // Globe clicks and list clicks share the exact same selection function.
-  scene.onPointerObservable.add(pointerInfo => {
-    if (pointerInfo.type !== BABYLON.PointerEventTypes.POINTERPICK) return;
-    const picked = pointerInfo.pickInfo?.pickedMesh;
-    const platform = LAUNCH_PLATFORMS.find(item => item.id === picked?.metadata?.platformId);
-    if (platform) selectLaunchPlatform(platform);
-  });
-  selectLaunchPlatform(LAUNCH_PLATFORMS[0], false);
-}
-
-createLaunchPlatformMarkers();
 
 let textureReadyReported = false;
 function updateStatus() {
@@ -159,6 +120,7 @@ window.__BABYLON_SCENE = scene;
 window.__BABYLON_ENGINE = engine;
 window.__SIMULATION_CLOCK = clock;
 window.__CELESTIAL_SYSTEM = celestial;
+window.__SUN_LIGHTING = sunPresentation;
 window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray() }; };
 window.__EARTH_WELCOME = {
   earth: celestial.earth,
@@ -170,8 +132,9 @@ window.__EARTH_WELCOME = {
   earthRadiusScene: celestial.earthRadiusScene,
   moonRadiusScene: celestial.moonRadiusScene,
   physicalRadiusM: ATMOSPHERE.earthMeanRadiusM,
-  platformMarkers,
-  getSelectedPlatform: () => selectedPlatform
+  platformMarkers: launchWizard.platformMarkers,
+  getSelectedPlatform: launchWizard.getSelectedPlatform,
+  getSelectedCountry: launchWizard.getSelectedCountry
 };
 
 engine.runRenderLoop(() => {

@@ -11,10 +11,10 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   const moonOrbitPeriodSeconds = 27.321661 * 86_400;
   const earthRotationPeriodSeconds = 86_164.0905;
 
-  const sun = BABYLON.MeshBuilder.CreateSphere('Sun reference', {diameter: 1.25, segments: 48}, scene);
+  const sun = BABYLON.MeshBuilder.CreateSphere('Sun reference', {diameter: .82, segments: 48}, scene);
   sun.parent = solarRoot;
   const sunMaterial = new BABYLON.StandardMaterial('Sun reference material', scene);
-  sunMaterial.emissiveColor = new BABYLON.Color3(1, .48, .08);
+  sunMaterial.emissiveColor = new BABYLON.Color3(1, .66, .22);
   sunMaterial.disableLighting = true;
   sun.material = sunMaterial;
 

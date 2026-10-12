@@ -2,7 +2,9 @@
 
 - `main.js` — browser coordinator: camera, lights, launch-wizard DOM, marker picking, diagnostics, and the render loop.
 - `celestial-system.js` — Earth, Moon, Sun, atmosphere, and Earth/Moon orbit guides.
+- `launch-wizard.js` — country grouping, location comparison benefits, marker creation, and shared selection state.
 - `launch-platforms.js` — real launch-platform records and the corrected equirectangular-texture coordinate conversion.
+- `sun-lighting.js` — Sun directional lighting, atmospheric Fresnel rim, glow, and procedural lens flare.
 - `atmosphere-model.js` — ground-zero ISA reference model.
 - `simulation-clock.js` — shared simulation time used by Earth rotation, Earth orbit, and Moon orbit.
 
