@@ -102,17 +102,18 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       node.position.set(Math.cos(angle) * ring, h / 2, Math.sin(angle) * ring);
       componentNodes.set(component.id, node);
     });
-    rocketRoot.metadata = {vehicleId: vehicle.id, visualBoost, heightM: vehicle.heightM, diameterM: vehicle.diameterM};
+    rocketRoot.metadata = {vehicleId: vehicle.id, visualBoost, heightM: vehicle.heightM, diameterM: vehicle.diameterM, visualHeightScene: vehicle.heightM * scale, visualDiameterScene: vehicle.diameterM * scale};
     separationButtonNode.disabled = vehicle.components.every(item => !item.detachable);
     renderVehicleInfo(vehicle);
-    focusGround(marker);
+    focusGround(marker, rocketRoot.metadata.visualHeightScene);
   }
 
-  function focusGround(marker = selectedPlatformGround()) {
+  function focusGround(marker = selectedPlatformGround(), visualHeightScene = null) {
     if (!marker) return;
     const target = marker.getAbsolutePosition();
     camera.setTarget(target);
-    camera.radius = 2.2;
+    // Keep the selected rocket large enough in frame without changing physical dimensions.
+    camera.radius = Math.max(visualHeightScene ? visualHeightScene * 5 : earth.getBoundingInfo().boundingSphere.radius * .75, .1);
   }
 
   function renderVehicleInfo(vehicle) {

@@ -51,14 +51,17 @@ scene.clearColor = new BABYLON.Color4(0.004, 0.008, 0.02, 1);
 scene.imageProcessingConfiguration.exposure = 1.12;
 scene.imageProcessingConfiguration.contrast = 1.08;
 
-// The camera initially follows Earth so the launch-site markers remain readable.
-const camera = new BABYLON.ArcRotateCamera('Earth inspection camera', -Math.PI * 0.58, Math.PI * 0.38, 14, BABYLON.Vector3.Zero(), scene);
+const WORLD_SCALE = 2_500;
+const EARTH_RADIUS_SCENE = 3 * WORLD_SCALE;
+
+// The camera starts in the same enlarged world unit system as the celestial bodies.
+const camera = new BABYLON.ArcRotateCamera('Earth inspection camera', -Math.PI * 0.58, Math.PI * 0.38, 14 * WORLD_SCALE, BABYLON.Vector3.Zero(), scene);
 camera.attachControl(canvas, true);
-camera.lowerRadiusLimit = 4.1;
-camera.upperRadiusLimit = 200000;
+camera.lowerRadiusLimit = 0.1;
+camera.upperRadiusLimit = 100_000_000;
 camera.wheelDeltaPercentage = 0.012;
 camera.minZ = 0.01;
-camera.maxZ = 250000;
+camera.maxZ = EARTH_RADIUS_SCENE * 480 * 4;
 
 // A low neutral fill keeps the Earth surface inspectable without a glare post-process.
 const fillLight = new BABYLON.HemisphericLight('Neutral scene fill', new BABYLON.Vector3(0, 1, 0), scene);
@@ -66,14 +69,15 @@ fillLight.intensity = 0.08;
 fillLight.diffuse = new BABYLON.Color3(0.38, 0.45, 0.62);
 fillLight.groundColor = new BABYLON.Color3(0.01, 0.02, 0.05);
 
-function createStars() {
+function createStars(worldScale = 1) {
   // A small procedural star field provides depth without competing with the globe.
   const stars = new BABYLON.ParticleSystem('welcome star field', 900, scene);
+  const starExtent = 70 * worldScale;
   stars.particleTexture = new BABYLON.Texture('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADElEQVR42mNk+M/wHwAF/gL+9Q2a7wAAAABJRU5ErkJggg==', scene);
-  stars.minEmitBox = new BABYLON.Vector3(-70, -70, -70);
-  stars.maxEmitBox = new BABYLON.Vector3(70, 70, 70);
-  stars.minSize = 0.018;
-  stars.maxSize = 0.06;
+  stars.minEmitBox = new BABYLON.Vector3(-starExtent, -starExtent, -starExtent);
+  stars.maxEmitBox = new BABYLON.Vector3(starExtent, starExtent, starExtent);
+  stars.minSize = 0.018 * worldScale;
+  stars.maxSize = 0.06 * worldScale;
   stars.minLifeTime = 999999;
   stars.maxLifeTime = 999999;
   stars.emitRate = 900;
@@ -86,8 +90,8 @@ function createStars() {
   stars.start();
 }
 
-createStars();
-const celestial = createCelestialSystem({ BABYLON, scene, earthRadiusScene: 3 });
+createStars(WORLD_SCALE);
+const celestial = createCelestialSystem({ BABYLON, scene, earthRadiusScene: EARTH_RADIUS_SCENE });
 const clock = createSimulationClock({ timeScale: 3600 }); // 1 real second advances 1 simulated hour for visible system motion.
 celestial.update(0);
 earthTargetFix();
@@ -95,7 +99,7 @@ earthTargetFix();
 function earthTargetFix() {
   celestial.earth.computeWorldMatrix(true);
   camera.setTarget(celestial.earth.getAbsolutePosition());
-  camera.radius = 14;
+  camera.radius = 14 * WORLD_SCALE;
 }
 
 function followEarthTarget() {
@@ -162,6 +166,7 @@ window.__BABYLON_ENGINE = engine;
 window.__SIMULATION_CLOCK = clock;
 window.__CELESTIAL_SYSTEM = celestial;
 window.__SCALE_MODEL = celestial.scaleModel;
+window.__WORLD_SCALE = WORLD_SCALE;
 window.__ROCKET_SYSTEM = rocketSystem;
 window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); followEarthTarget(); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray() }; };
 window.__EARTH_WELCOME = {
