@@ -271,6 +271,14 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     }
   }
 
+  function focusRocket() {
+    if (!rocketRoot) return false;
+    camera.setTarget(rocketRoot.getAbsolutePosition());
+    camera.radius = Math.max(42, rocketRoot.metadata?.visualHeightScene * 4 || 120);
+    camera.minZ = .01;
+    return true;
+  }
+
   function launchToOrbit(callbacks = {}) {
     if (!rocketRoot || !selectedVehicle || launchState) return false;
     const startPosition = rocketRoot.position.clone();
@@ -291,7 +299,12 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       orbitDuration: 20,
       callbacks,
       orbitAngle: 0,
-      orbitReported: false
+      orbitReported: false,
+      earthRadiusScene,
+      altitudeKm: 0,
+      radiusKm: 6371,
+      speedKmS: 0,
+      previousPosition: startPosition.clone()
     };
     if (launchButtonNode) {
       launchButtonNode.disabled = true;
@@ -327,6 +340,10 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       state.callbacks.onPhaseChange?.(phase);
     }
     const position = state.startNormal.scale(Math.cos(state.orbitAngle)).add(state.tangent.scale(Math.sin(state.orbitAngle))).scale(radius);
+    state.speedKmS = deltaSeconds > 0 ? position.subtract(state.previousPosition).length() * 6371 / state.earthRadiusScene / deltaSeconds : 0;
+    state.previousPosition.copyFrom(position);
+    state.radiusKm = radius * 6371 / state.earthRadiusScene;
+    state.altitudeKm = state.radiusKm - 6371;
     setRadialPose(position);
     setFlightSeconds(Math.max(0, state.elapsed * 12));
     if (phase === 'stable-leo' && !state.orbitReported) {
@@ -363,5 +380,5 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     buildRocket(vehicle);
   }));
 
-  return {buildRocket, focusGround, setFlightSeconds, launchToOrbit, stepLaunch, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getLaunchState: () => launchState, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
+  return {buildRocket, focusGround, focusRocket, setFlightSeconds, launchToOrbit, stepLaunch, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getLaunchState: () => launchState, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
 }

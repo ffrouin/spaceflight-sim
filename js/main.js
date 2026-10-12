@@ -33,6 +33,13 @@ const separationButtonNode = document.getElementById('previewSeparation');
 const launchButtonNode = document.getElementById('launchRocket');
 const rocketPreviewCanvas = document.getElementById('rocketPreviewCanvas');
 const tabletStatusNode = document.getElementById('tabletStatus');
+const flightTelemetryNode = document.getElementById('flightTelemetry');
+const telemetryStateNode = document.getElementById('telemetryState');
+const telemetryTimeNode = document.getElementById('telemetryTime');
+const telemetryAltitudeNode = document.getElementById('telemetryAltitude');
+const telemetrySpeedNode = document.getElementById('telemetrySpeed');
+const telemetryRadiusNode = document.getElementById('telemetryRadius');
+const telemetryNoteNode = document.getElementById('telemetryNote');
 
 // Expose the physical launch reference for the later wizard stages and review tooling.
 window.__ATMOSPHERE_MODEL = { constants: ATMOSPHERE, atAltitude: isaAtmosphereAt };
@@ -170,6 +177,17 @@ function prepareLaunchEnvironment() {
   statusNode.textContent = 'launch frame initialized · ground to 100 km atmosphere boundary';
 }
 
+function updateFlightTelemetry() {
+  const state = rocketSystem.getLaunchState?.();
+  if (!state) return;
+  telemetryStateNode.textContent = state.phase.replaceAll('-', ' ').toUpperCase();
+  telemetryTimeNode.textContent = `${state.elapsed.toFixed(1)} s`;
+  telemetryAltitudeNode.textContent = `${Math.max(0, state.altitudeKm).toFixed(1)} km`;
+  telemetrySpeedNode.textContent = `${state.speedKmS.toFixed(3)} km/s`;
+  telemetryRadiusNode.textContent = `${state.radiusKm.toFixed(1)} km`;
+  telemetryNoteNode.textContent = state.phase === 'stable-leo' ? 'Earth–Moon view restored; vehicle remains in low Earth orbit.' : 'Camera locked to the launch vehicle.';
+}
+
 function restoreMoonFlightView() {
   [celestial.moon, celestial.sun, celestial.earthOrbit, celestial.moonOrbit].forEach(node => node?.setEnabled(true));
   camera.maxZ = EARTH_RADIUS_SCENE * 480 * 4;
@@ -181,6 +199,8 @@ function restoreMoonFlightView() {
 launchButtonNode.addEventListener('click', () => {
   if (!rocketSystem.getSelectedVehicle?.()) return;
   prepareLaunchEnvironment();
+  rocketDockNode.classList.add('hidden');
+  flightTelemetryNode.classList.remove('hidden');
   const started = rocketSystem.launchToOrbit({
     onPhaseChange: phase => {
       const labels = {
@@ -193,7 +213,10 @@ launchButtonNode.addEventListener('click', () => {
     },
     onOrbitAchieved: restoreMoonFlightView
   });
-  if (!started) statusNode.textContent = 'select a crewed rocket before launch';
+  if (started) {
+    rocketSystem.focusRocket();
+    updateFlightTelemetry();
+  } else statusNode.textContent = 'select a crewed rocket before launch';
 });
 
 updateLaunchAtmosphere(launchWizard.getSelectedPlatform());
@@ -217,7 +240,7 @@ window.__CELESTIAL_SYSTEM = celestial;
 window.__SCALE_MODEL = celestial.scaleModel;
 window.__WORLD_SCALE = WORLD_SCALE;
 window.__ROCKET_SYSTEM = rocketSystem;
-window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); rocketSystem.stepLaunch(realDeltaSeconds); followEarthTarget(); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray(), launchState: rocketSystem.getLaunchState?.() }; };
+window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); rocketSystem.stepLaunch(realDeltaSeconds); updateFlightTelemetry(); followEarthTarget(); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray(), launchState: rocketSystem.getLaunchState?.() }; };
 window.__EARTH_WELCOME = {
   earth: celestial.earth,
   moon: celestial.moon,
@@ -245,6 +268,7 @@ function renderFrame() {
   const simulationSeconds = clock.tick(realDeltaSeconds);
   celestial.update(simulationSeconds);
   rocketSystem.stepLaunch(realDeltaSeconds);
+  updateFlightTelemetry();
   followEarthTarget();
   updateStatus();
   scene.render();
