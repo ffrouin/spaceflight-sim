@@ -138,7 +138,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     const target = marker.getAbsolutePosition();
     camera.setTarget(target);
     // Keep the selected rocket large enough in frame without changing physical dimensions.
-    camera.radius = Math.max(visualHeightScene ? visualHeightScene * 5 : earth.getBoundingInfo().boundingSphere.radius * .75, .1);
+    camera.radius = Math.max(visualHeightScene ? visualHeightScene * 4 : earth.getBoundingInfo().boundingSphere.radius * .08, .1);
   }
 
   function renderVehicleInfo(vehicle) {
