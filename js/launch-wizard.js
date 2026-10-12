@@ -76,7 +76,8 @@ export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms,
     if (focus) {
       const target = platformMarkers.get(platform.id).getAbsolutePosition();
       camera.setTarget(target);
-      camera.radius = Math.max(24, earthRadiusScene * .08);
+      // Keep the camera outside the globe for every Earth-rotation phase.
+      camera.radius = Math.max(24, earthRadiusScene * 2.05);
     }
     onPlatformSelected(platform, userInitiated);
   }
