@@ -102,25 +102,10 @@ function earthTargetFix() {
   camera.radius = 14 * WORLD_SCALE;
 }
 
-let groundFollowState = null;
-
 function followEarthTarget() {
   const selected = launchWizard?.getSelectedPlatform?.();
   const focusNode = selected ? launchWizard.platformMarkers.get(selected.id) : celestial.earth;
-  const focusPosition = focusNode?.getAbsolutePosition?.() || celestial.earth.getAbsolutePosition();
-  if (selected && focusNode) {
-    if (groundFollowState?.marker === focusNode) {
-      const delta = focusPosition.subtract(groundFollowState.lastPosition);
-      camera.position.addInPlace(delta);
-      camera.target.addInPlace(delta);
-    } else {
-      groundFollowState = {marker: focusNode, lastPosition: focusPosition.clone()};
-    }
-  } else {
-    groundFollowState = null;
-  }
-  camera.target.copyFrom(focusPosition);
-  if (groundFollowState) groundFollowState.lastPosition.copyFrom(focusPosition);
+  camera.target.copyFrom(focusNode?.getAbsolutePosition?.() || celestial.earth.getAbsolutePosition());
 }
 
 function updateLaunchAtmosphere(platform) {
