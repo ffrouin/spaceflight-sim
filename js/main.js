@@ -104,7 +104,8 @@ function createStars(worldScale = 1) {
 
 createStars(WORLD_SCALE);
 const celestial = createCelestialSystem({ BABYLON, scene, earthRadiusScene: EARTH_RADIUS_SCENE });
-const clock = createSimulationClock({ timeScale: 3600 }); // 1 real second advances 1 simulated hour for visible system motion.
+const WELCOME_TIME_SCALE = 3600;
+const clock = createSimulationClock({ timeScale: WELCOME_TIME_SCALE }); // Welcome view: 1 real second advances 1 simulated hour.
 celestial.update(0);
 earthTargetFix();
 
@@ -174,7 +175,7 @@ function prepareLaunchEnvironment() {
   camera.minZ = .01;
   const marker = launchWizard.platformMarkers.get(launchWizard.getSelectedPlatform()?.id);
   rocketSystem.focusGround(marker);
-  statusNode.textContent = 'launch frame initialized · ground to 100 km atmosphere boundary';
+  statusNode.textContent = 'launch frame initialized · simulation clock 1× real time · ground to 100 km atmosphere boundary';
 }
 
 function updateFlightTelemetry() {
@@ -198,6 +199,7 @@ function restoreMoonFlightView() {
 
 launchButtonNode.addEventListener('click', () => {
   if (!rocketSystem.getSelectedVehicle?.()) return;
+  clock.setTimeScale(1);
   prepareLaunchEnvironment();
   rocketDockNode.classList.add('hidden');
   flightTelemetryNode.classList.remove('hidden');
