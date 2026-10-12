@@ -37,6 +37,20 @@ export function createFlightView({BABYLON, canvas}) {
   reticleMaterial.disableLighting = true;
   reticle.material = reticleMaterial;
 
+  // Fixed stars make vehicle attitude changes visible even when Earth is below the nose window.
+  const starMaterial = new BABYLON.StandardMaterial('crew camera stars material', scene);
+  starMaterial.emissiveColor = new BABYLON.Color3(.72, .84, 1);
+  starMaterial.disableLighting = true;
+  for (let index = 0; index < 56; index += 1) {
+    const azimuth = index * 2.399963;
+    const elevation = ((index * 37) % 100) / 100 * 2 - 1;
+    const ring = Math.sqrt(1 - elevation * elevation);
+    const star = BABYLON.MeshBuilder.CreateSphere(`crew camera star ${index}`, {diameter: index % 7 === 0 ? .18 : .1, segments: 6}, scene);
+    star.position.set(Math.cos(azimuth) * ring * 45, elevation * 45, Math.sin(azimuth) * ring * 45);
+    star.material = starMaterial;
+    star.isPickable = false;
+  }
+
   let active = false;
   let lastState = null;
 

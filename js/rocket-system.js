@@ -45,6 +45,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
   let launchState = null;
   let flightTrace = null;
   let flightTracePoints = [];
+  let crewCameraLocalLookDirection = null;
 
   function materialFor(kind, id, targetScene = scene) {
     const material = new BABYLON.StandardMaterial(`rocket material · ${id} · ${targetScene === scene ? 'world' : 'tablet'}`, targetScene);
@@ -80,6 +81,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     flightTrace = null;
     flightTracePoints = [];
     launchState = null;
+    crewCameraLocalLookDirection = null;
     componentNodes = new Map();
     separationButtonNode.disabled = true;
     separationButtonNode.textContent = 'Preview next separation';
@@ -304,15 +306,20 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     const cabinTopScene = (cabinBaseM + cabin.heightM) * scale;
     camera.parent = rocketRoot;
     camera.position.set(0, cabinTopScene + Math.max(.02, 2 * scale), 0);
-    camera.computeWorldMatrix(true);
-    const cameraWorldPosition = camera.getWorldMatrix().getTranslation();
     const rocketForward = rocketRoot.getDirection(BABYLON.Axis.Y).normalize();
-    const earthDirection = earth.getAbsolutePosition().subtract(cameraWorldPosition).normalize();
-    const horizonView = state && (state.phase === 'orbital-insertion' || state.phase === 'stable-leo');
-    const lookDirection = horizonView ? rocketForward.scale(.86).add(earthDirection.scale(.51)).normalize() : rocketForward;
+    // The camera is rigidly attached to the vehicle: it never slews toward Earth.
+    // Earth and the star field therefore move through the frame as the rocket changes heading.
     const rootInverse = rocketRoot.getWorldMatrix().clone();
     rootInverse.invert();
-    const localLookDirection = BABYLON.Vector3.TransformNormal(lookDirection, rootInverse).normalize();
+    const localForwardDirection = BABYLON.Vector3.TransformNormal(rocketForward, rootInverse).normalize();
+    if (!crewCameraLocalLookDirection && state && (state.phase === 'orbital-insertion' || state.phase === 'stable-leo')) {
+      camera.computeWorldMatrix(true);
+      const cameraWorldPosition = camera.getWorldMatrix().getTranslation();
+      const earthDirection = earth.getAbsolutePosition().subtract(cameraWorldPosition).normalize();
+      const localEarthDirection = BABYLON.Vector3.TransformNormal(earthDirection, rootInverse).normalize();
+      crewCameraLocalLookDirection = localForwardDirection.scale(.78).add(localEarthDirection.scale(.63)).normalize();
+    }
+    const localLookDirection = crewCameraLocalLookDirection || localForwardDirection;
     const cameraRotationAxis = BABYLON.Vector3.Cross(BABYLON.Axis.Z, localLookDirection);
     if (cameraRotationAxis.lengthSquared() > .000001) {
       cameraRotationAxis.normalize();
@@ -322,7 +329,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     }
     camera.minZ = .001;
     camera.fov = .82;
-    camera.metadata = {mount: 'ahead-of-crew-cabin', viewMode: horizonView ? 'forward-earth-horizon' : 'forward-ascent', vehicleId: selectedVehicle.id, cabinComponentId: cabin.id};
+    camera.metadata = {mount: 'ahead-of-crew-cabin', viewMode: 'rigid-forward-flight-vector', vehicleId: selectedVehicle.id, cabinComponentId: cabin.id};
     return true;
   }
 
@@ -345,6 +352,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     const orbitalVelocityKmS = 7.79;
     const orbitAngularRate = orbitalVelocityKmS / orbitRadiusKm;
     const earthRadiusScene = window.__CELESTIAL_SYSTEM?.earthRadiusScene || earth.getBoundingInfo().boundingSphere.radius;
+    crewCameraLocalLookDirection = null;
     launchState = {
       elapsed: 0,
       phase: 'liftoff',

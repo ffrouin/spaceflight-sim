@@ -284,7 +284,7 @@ function updateFlightTelemetry() {
   telemetryTraceNode.textContent = `${rocketSystem.getFlightTrace?.().pointCount || 0} points`;
   rocketSystem.updateCrewCamera(crewCabinCamera, state);
   flightView.update(state, crewCabinCamera, celestial.earth.getAbsolutePosition(), rocketSystem.getRocketRoot()?.getAbsolutePosition());
-  telemetryNoteNode.textContent = state.phase === 'stable-leo' ? 'Crew-cabin nose camera active. Earth–Moon view restored; vehicle remains in low Earth orbit.' : 'Crew-cabin nose camera active. View is aligned with the live rocket flight direction.';
+  telemetryNoteNode.textContent = state.phase === 'stable-leo' ? 'Rigid crew-cabin camera active. Earth and fixed stars move through the forward window with orbital heading.' : 'Rigid crew-cabin camera active. Forward view follows the live vehicle attitude.';
 }
 
 function restoreMoonFlightView() {
