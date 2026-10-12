@@ -62,6 +62,24 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   earth.isPickable = true;
   earth.metadata = {celestialName: 'Earth', focusType: 'planet'};
 
+  // Render the Solar System Scope cloud map on a thin, independently rotating shell.
+  // The downloaded JPEG is retained as the color map; a local luminance-derived PNG supplies transparent cloud coverage.
+  const earthClouds = BABYLON.MeshBuilder.CreateSphere('Earth cloud layer', {diameter: earthRadiusScene * 2.018, segments: 96}, scene);
+  earthClouds.parent = earth;
+  const earthCloudMaterial = new BABYLON.StandardMaterial('Earth cloud layer material', scene);
+  earthCloudMaterial.diffuseTexture = new BABYLON.Texture('assets/solar-system-scope-earth-clouds-2k.jpg', scene, true, false);
+  earthCloudMaterial.opacityTexture = new BABYLON.Texture('assets/solar-system-scope-earth-clouds-2k-alpha.png', scene, true, false);
+  earthCloudMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
+  earthCloudMaterial.alpha = .72;
+  earthCloudMaterial.backFaceCulling = false;
+  earthCloudMaterial.disableLighting = true;
+  earthCloudMaterial.needDepthPrePass = true;
+  earthCloudMaterial.zOffset = -3;
+  if ('transparencyMode' in earthCloudMaterial && BABYLON.Material.MATERIAL_ALPHABLEND != null) earthCloudMaterial.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+  earthClouds.material = earthCloudMaterial;
+  earthClouds.isPickable = false;
+  earthClouds.metadata = {type: 'earth-cloud-layer', source: 'Solar System Scope'};
+
   const atmosphere = BABYLON.MeshBuilder.CreateSphere('Earth atmosphere', {diameter: earthRadiusScene * 2.045, segments: 96}, scene);
   atmosphere.parent = earth;
   const atmosphereMaterial = new BABYLON.StandardMaterial('Earth atmosphere scattering shell', scene);
@@ -168,6 +186,7 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
     const earthSpin = simulationSeconds / earthRotationPeriodSeconds * Math.PI * 2;
     earthOrbitRoot.rotation.y = earthAngle;
     earth.rotation.y = earthSpin;
+    earthClouds.rotation.y = earthSpin * 1.035;
     nightGlow.rotation.y = earthSpin * .88;
     earthGroundMarker.rotation.z = earthSpin * .15;
     moon.position.set(Math.cos(moonAngle) * moonOrbitRadius, 0.16 * Math.sin(moonAngle * .5), Math.sin(moonAngle) * moonOrbitRadius);
@@ -182,8 +201,8 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   };
 
   return {
-    solarRoot, sun, sunLight, moonShadow, earthOrbit, earthOrbitRoot, earthFrame, earth, atmosphere, nightGlow, earthGroundMarker, moonOrbitRoot, moon, moonOrbit,
-    earthMaterial, moonMaterial, earthRadiusScene, moonRadiusScene, sunRadiusScene, earthOrbitRadius, moonOrbitRadius,
+    solarRoot, sun, sunLight, moonShadow, earthOrbit, earthOrbitRoot, earthFrame, earth, earthClouds, atmosphere, nightGlow, earthGroundMarker, moonOrbitRoot, moon, moonOrbit,
+    earthMaterial, earthCloudMaterial, moonMaterial, earthRadiusScene, moonRadiusScene, sunRadiusScene, earthOrbitRadius, moonOrbitRadius,
     earthAxialTiltDeg, moonOrbitalInclinationDeg,
     scaleModel: {
       earthRadiusKm: EARTH_RADIUS_KM, moonRadiusKm: MOON_RADIUS_KM, sunRadiusKm: SUN_RADIUS_KM,
@@ -198,6 +217,6 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
       solarDistanceIsVisuallyCompressed: true
     },
     update,
-    texturesReady: () => Boolean(earthMaterial.albedoTexture?.isReady() && earthMaterial.bumpTexture?.isReady() && earthMaterial.metallicTexture?.isReady())
+    texturesReady: () => Boolean(earthMaterial.albedoTexture?.isReady() && earthMaterial.bumpTexture?.isReady() && earthMaterial.metallicTexture?.isReady() && earthCloudMaterial.diffuseTexture?.isReady() && earthCloudMaterial.opacityTexture?.isReady() && moonMaterial.albedoTexture?.isReady())
   };
 }
