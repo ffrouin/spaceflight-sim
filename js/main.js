@@ -141,8 +141,8 @@ function createStars(worldScale = 1) {
 
 createStars(WORLD_SCALE);
 const celestial = createCelestialSystem({ BABYLON, scene, earthRadiusScene: EARTH_RADIUS_SCENE });
-const WELCOME_TIME_SCALE = 3600;
-const clock = createSimulationClock({ timeScale: WELCOME_TIME_SCALE }); // Welcome view: 1 real second advances 1 simulated hour.
+const WELCOME_TIME_SCALE = 600;
+const clock = createSimulationClock({ timeScale: WELCOME_TIME_SCALE }); // Welcome view: 1 real second advances 10 simulated minutes.
 let launchTimeRate = 1;
 
 function setLaunchTimeRate(rate) {
