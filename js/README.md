@@ -15,9 +15,10 @@
 - Moon radius: 1,737.4 km reference (`0.2727×` Earth radius)
 - Sun radius: 696,340 km reference (`109.30×` Earth radius)
 - Moon center distance: 384,400 km (`60.34×` Earth radius)
-- Earth–Sun distance: 1 AU (`23,481.07×` Earth radius)
+- Earth–Sun visual distance: `480×` Earth radius (bounded presentation scale)
+- Earth–Sun physical distance: 1 AU (`23,481.07×` Earth radius)
 
-The welcome camera starts in a readable local Earth inspection view. Zooming out toward roughly `110` scene units reveals the correctly separated Earth–Moon system; the Sun remains available as a physically sized, Sun-centered reference and can be inspected through the runtime scale diagnostics. No lens flare or glare post-process is installed.
+The Sun diameter and Earth/Moon diameter ratios remain physical. The Earth–Sun distance is intentionally compressed for stable browser rendering; the physical value remains exposed in `window.__SCALE_MODEL.physicalEarthSunDistanceEarthRadii`.
 
 Each module begins with a short goal/technique comment so the implementation remains reviewable by a human.
 

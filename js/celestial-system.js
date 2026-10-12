@@ -11,7 +11,10 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   const SUN_RADIUS_KM = 696340;
   const MOON_DISTANCE_KM = 384400;
   const ASTRONOMICAL_UNIT_KM = 149597870.7;
-  const earthOrbitRadius = earthRadiusScene * ASTRONOMICAL_UNIT_KM / EARTH_RADIUS_KM;
+  // The true AU is retained for diagnostics, but a bounded solar presentation distance avoids large-coordinate jitter.
+  const SOLAR_VISUAL_DISTANCE_EARTH_RADII = 480;
+  const earthOrbitRadius = earthRadiusScene * SOLAR_VISUAL_DISTANCE_EARTH_RADII;
+  const physicalEarthSunDistanceEarthRadii = ASTRONOMICAL_UNIT_KM / EARTH_RADIUS_KM;
   const moonOrbitRadius = earthRadiusScene * MOON_DISTANCE_KM / EARTH_RADIUS_KM;
   const moonRadiusScene = earthRadiusScene * MOON_RADIUS_KM / EARTH_RADIUS_KM;
   const sunRadiusScene = earthRadiusScene * SUN_RADIUS_KM / EARTH_RADIUS_KM;
@@ -122,7 +125,9 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
       sunToEarthRadiusRatio: sunRadiusScene / earthRadiusScene,
       moonToEarthRadiusRatio: moonRadiusScene / earthRadiusScene,
       moonDistanceEarthRadii: moonOrbitRadius / earthRadiusScene,
-      earthSunDistanceEarthRadii: earthOrbitRadius / earthRadiusScene
+      earthSunDistanceEarthRadii: earthOrbitRadius / earthRadiusScene,
+      physicalEarthSunDistanceEarthRadii,
+      solarDistanceIsVisuallyCompressed: true
     },
     update,
     texturesReady: () => Boolean(earthMaterial.albedoTexture?.isReady() && earthMaterial.bumpTexture?.isReady() && earthMaterial.metallicTexture?.isReady())

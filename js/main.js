@@ -85,6 +85,12 @@ function earthTargetFix() {
   camera.radius = 14;
 }
 
+function followEarthTarget() {
+  const selected = launchWizard?.getSelectedPlatform?.();
+  const focusNode = selected ? launchWizard.platformMarkers.get(selected.id) : celestial.earth;
+  camera.target.copyFrom(focusNode?.getAbsolutePosition?.() || celestial.earth.getAbsolutePosition());
+}
+
 const platformMarkerRoot = new BABYLON.TransformNode('launch platform marker root', scene);
 platformMarkerRoot.parent = celestial.earth;
 const launchWizard = createLaunchWizard({
@@ -110,7 +116,7 @@ window.__BABYLON_ENGINE = engine;
 window.__SIMULATION_CLOCK = clock;
 window.__CELESTIAL_SYSTEM = celestial;
 window.__SCALE_MODEL = celestial.scaleModel;
-window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray() }; };
+window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); followEarthTarget(); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray() }; };
 window.__EARTH_WELCOME = {
   earth: celestial.earth,
   moon: celestial.moon,
@@ -135,6 +141,7 @@ function renderFrame() {
   lastFrameTime = now;
   const simulationSeconds = clock.tick(realDeltaSeconds);
   celestial.update(simulationSeconds);
+  followEarthTarget();
   updateStatus();
   scene.render();
 }
