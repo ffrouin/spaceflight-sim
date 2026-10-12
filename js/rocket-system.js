@@ -290,6 +290,42 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     }
   }
 
+  function updateCrewCamera(camera, state = launchState) {
+    if (!camera || !rocketRoot || !selectedVehicle) return false;
+    const scale = metersToScene(window.__CELESTIAL_SYSTEM.earthRadiusScene, 1);
+    const stack = selectedVehicle.components.filter(item => item.kind !== 'booster').sort((a, b) => {
+      const order = {'core-stage': 1, 'upper-stage': 2, 'interstage': 3, 'crew-capsule': 4, 'orbital-module': 5, 'escape-system': 6, 'escape-tower': 7};
+      return (order[a.kind] || 4) - (order[b.kind] || 4);
+    });
+    const cabinIndex = stack.findIndex(component => component.kind === 'crew-capsule');
+    if (cabinIndex < 0) return false;
+    const cabinBaseM = stack.slice(0, cabinIndex).reduce((sum, component) => sum + component.heightM, 0);
+    const cabin = stack[cabinIndex];
+    const cabinTopScene = (cabinBaseM + cabin.heightM) * scale;
+    camera.parent = rocketRoot;
+    camera.position.set(0, cabinTopScene + Math.max(.02, 2 * scale), 0);
+    camera.computeWorldMatrix(true);
+    const cameraWorldPosition = camera.getWorldMatrix().getTranslation();
+    const rocketForward = rocketRoot.getDirection(BABYLON.Axis.Y).normalize();
+    const earthDirection = earth.getAbsolutePosition().subtract(cameraWorldPosition).normalize();
+    const horizonView = state && (state.phase === 'orbital-insertion' || state.phase === 'stable-leo');
+    const lookDirection = horizonView ? rocketForward.scale(.86).add(earthDirection.scale(.51)).normalize() : rocketForward;
+    const rootInverse = rocketRoot.getWorldMatrix().clone();
+    rootInverse.invert();
+    const localLookDirection = BABYLON.Vector3.TransformNormal(lookDirection, rootInverse).normalize();
+    const cameraRotationAxis = BABYLON.Vector3.Cross(BABYLON.Axis.Z, localLookDirection);
+    if (cameraRotationAxis.lengthSquared() > .000001) {
+      cameraRotationAxis.normalize();
+      camera.rotationQuaternion = BABYLON.Quaternion.RotationAxis(cameraRotationAxis, Math.acos(BABYLON.Scalar.Clamp(BABYLON.Vector3.Dot(BABYLON.Axis.Z, localLookDirection), -1, 1)));
+    } else {
+      camera.rotationQuaternion = BABYLON.Quaternion.Identity();
+    }
+    camera.minZ = .001;
+    camera.fov = .82;
+    camera.metadata = {mount: 'ahead-of-crew-cabin', viewMode: horizonView ? 'forward-earth-horizon' : 'forward-ascent', vehicleId: selectedVehicle.id, cabinComponentId: cabin.id};
+    return true;
+  }
+
   function focusRocket() {
     if (!rocketRoot) return false;
     camera.setTarget(rocketRoot.getAbsolutePosition());
@@ -370,10 +406,14 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       state.callbacks.onPhaseChange?.(phase);
     }
     const position = state.startNormal.scale(Math.cos(state.orbitAngle)).add(state.tangent.scale(Math.sin(state.orbitAngle))).scale(radius);
-    const flightDirection = position.subtract(state.previousPosition);
-    state.flightDirection = flightDirection.lengthSquared() > .000001 ? flightDirection.normalizeToNew() : position.normalizeToNew();
+    const displacement = position.subtract(state.previousPosition);
+    const tangentDirection = state.startNormal.scale(-Math.sin(state.orbitAngle)).add(state.tangent.scale(Math.cos(state.orbitAngle))).normalize();
+    const flightDirection = displacement.lengthSquared() > .000001
+      ? displacement
+      : (phase === 'stable-leo' ? tangentDirection : position.normalizeToNew());
+    state.flightDirection = flightDirection.normalizeToNew();
     state.radialDirection = position.normalizeToNew();
-    state.speedKmS = deltaSeconds > 0 ? flightDirection.length() * 6371 / state.earthRadiusScene / deltaSeconds : 0;
+    state.speedKmS = deltaSeconds > 0 ? displacement.length() * 6371 / state.earthRadiusScene / deltaSeconds : (phase === 'stable-leo' ? state.orbitalVelocityKmS : 0);
     state.previousPosition.copyFrom(position);
     state.radiusKm = radius * 6371 / state.earthRadiusScene;
     state.altitudeKm = state.radiusKm - 6371;
@@ -426,5 +466,5 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     buildRocket(vehicle);
   }));
 
-  return {buildRocket, selectVehicleById, focusGround, focusRocket, setFlightSeconds, launchToOrbit, stepLaunch, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getFlightTrace: () => ({mesh: flightTrace, pointCount: flightTracePoints.length, points: flightTracePoints.map(point => point.asArray())}), getLaunchState: () => launchState, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
+  return {buildRocket, selectVehicleById, focusGround, focusRocket, updateCrewCamera, setFlightSeconds, launchToOrbit, stepLaunch, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getFlightTrace: () => ({mesh: flightTrace, pointCount: flightTracePoints.length, points: flightTracePoints.map(point => point.asArray())}), getLaunchState: () => launchState, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
 }

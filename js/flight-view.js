@@ -18,6 +18,7 @@ export function createFlightView({BABYLON, canvas}) {
   const earthMaterial = new BABYLON.StandardMaterial('onboard Earth material', scene);
   earthMaterial.diffuseTexture = new BABYLON.Texture('assets/earth-day.jpg', scene);
   earthMaterial.specularColor = new BABYLON.Color3(.08, .1, .14);
+  earthMaterial.backFaceCulling = false;
   earth.material = earthMaterial;
 
   const atmosphere = BABYLON.MeshBuilder.CreateSphere('onboard atmosphere', {diameter: 18.35, segments: 32}, scene);
@@ -39,19 +40,31 @@ export function createFlightView({BABYLON, canvas}) {
   let active = false;
   let lastState = null;
 
-  function update(state) {
+  function update(state, referenceCamera = null, earthWorldPosition = null, rocketWorldPosition = null) {
     lastState = state;
     const altitudeFraction = Math.min(1, Math.max(0, (state?.altitudeKm || 0) / 200));
     const angle = state?.orbitAngle || 0;
     const radial = state?.startNormal && state?.tangent
       ? state.startNormal.scale(Math.cos(angle)).add(state.tangent.scale(Math.sin(angle))).normalize()
       : new BABYLON.Vector3(0, 1, 0);
-    const forward = state?.flightDirection?.lengthSquared?.() > .000001 ? state.flightDirection.normalizeToNew() : radial;
-    const reference = Math.abs(BABYLON.Vector3.Dot(forward, BABYLON.Vector3.Up())) > .94 ? BABYLON.Vector3.Right() : BABYLON.Vector3.Up();
-    const right = BABYLON.Vector3.Cross(forward, reference).normalize();
-    const up = BABYLON.Vector3.Cross(right, forward).normalize();
-    const earthDirection = radial.scale(-1);
-    const distance = 28 + altitudeFraction * 10;
+    let forward;
+    let right;
+    let up;
+    let earthDirection;
+    if (referenceCamera && earthWorldPosition && rocketWorldPosition) {
+      referenceCamera.computeWorldMatrix(true);
+      forward = referenceCamera.getDirection(BABYLON.Axis.Z).normalize();
+      right = referenceCamera.getDirection(BABYLON.Axis.X).normalize();
+      up = referenceCamera.getDirection(BABYLON.Axis.Y).normalize();
+      earthDirection = earthWorldPosition.subtract(rocketWorldPosition).normalize();
+    } else {
+      forward = state?.flightDirection?.lengthSquared?.() > .000001 ? state.flightDirection.normalizeToNew() : radial;
+      const reference = Math.abs(BABYLON.Vector3.Dot(forward, BABYLON.Vector3.Up())) > .94 ? BABYLON.Vector3.Right() : BABYLON.Vector3.Up();
+      right = BABYLON.Vector3.Cross(forward, reference).normalize();
+      up = BABYLON.Vector3.Cross(right, forward).normalize();
+      earthDirection = radial.scale(-1);
+    }
+    const distance = 10 + altitudeFraction * 2;
     const earthX = BABYLON.Vector3.Dot(earthDirection, right) * distance;
     const earthY = BABYLON.Vector3.Dot(earthDirection, up) * distance;
     const earthZ = BABYLON.Vector3.Dot(earthDirection, forward) * distance;

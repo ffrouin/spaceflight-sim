@@ -209,6 +209,9 @@ const rocketSystem = createRocketSystem({
   vehicleCatalog: LAUNCH_VEHICLES, camera, getSelectedPlatform: launchWizard.getSelectedPlatform, earth: celestial.earth,
   previewCanvas: rocketPreviewCanvas, tabletStatusNode
 });
+const crewCabinCamera = new BABYLON.FreeCamera('crew cabin camera · main Babylon scene', new BABYLON.Vector3(0, 0, 0), scene);
+crewCabinCamera.minZ = .001;
+crewCabinCamera.fov = .82;
 const flightView = createFlightView({BABYLON, canvas: flightViewCanvas});
 
 function bodyFocusRadius(body) {
@@ -279,7 +282,8 @@ function updateFlightTelemetry() {
   telemetrySpeedNode.textContent = `${state.speedKmS.toFixed(3)} km/s`;
   telemetryRadiusNode.textContent = `${state.radiusKm.toFixed(1)} km`;
   telemetryTraceNode.textContent = `${rocketSystem.getFlightTrace?.().pointCount || 0} points`;
-  flightView.update(state);
+  rocketSystem.updateCrewCamera(crewCabinCamera, state);
+  flightView.update(state, crewCabinCamera, celestial.earth.getAbsolutePosition(), rocketSystem.getRocketRoot()?.getAbsolutePosition());
   telemetryNoteNode.textContent = state.phase === 'stable-leo' ? 'Crew-cabin nose camera active. Earth–Moon view restored; vehicle remains in low Earth orbit.' : 'Crew-cabin nose camera active. View is aligned with the live rocket flight direction.';
 }
 
@@ -338,6 +342,7 @@ window.__SCALE_MODEL = celestial.scaleModel;
 window.__WORLD_SCALE = WORLD_SCALE;
 window.__SET_LAUNCH_TIME_RATE = setLaunchTimeRate;
 window.__FLIGHT_VIEW = flightView;
+window.__CREW_CABIN_CAMERA = crewCabinCamera;
 window.__ROCKET_SYSTEM = rocketSystem;
 window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); rocketSystem.stepLaunch(realDeltaSeconds * (rocketSystem.getLaunchState?.() ? launchTimeRate : 1)); updateFlightTelemetry(); followEarthTarget(); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray(), launchState: rocketSystem.getLaunchState?.() }; };
 window.__EARTH_WELCOME = {
