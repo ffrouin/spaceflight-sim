@@ -7,7 +7,8 @@
 - `atmosphere-model.js` — ground-zero ISA reference model.
 - `simulation-clock.js` — shared simulation time used by Earth rotation, Earth orbit, and Moon orbit.
 - `launch-vehicles.js` — immutable crewed-vehicle and detachable-component records.
-- `rocket-system.js` — Babylon assembly, ground focus, and staged-component preview.
+- `rocket-system.js` — Babylon assembly, ground focus, live flight trace, tangent orbital insertion, and staged-component preview.
+- `flight-view.js` — lightweight live-linked onboard camera monitor for the telemetry panel.
 
 ## Scale model
 
@@ -20,7 +21,9 @@
 - Earth–Sun visual distance: `480×` Earth radius (bounded presentation scale)
 - Earth–Sun physical distance: 1 AU (`23,481.07×` Earth radius)
 - Rocket component rendering: a `5,000×` readability boost is applied only to launcher meshes; physical dimensions remain authoritative in the vehicle catalog, while Earth size, atmosphere thickness, and the 200 km LEO target remain separate diagnostics.
-- First flight phase: ascent through a 100 km atmosphere reference layer; second phase: stable circular low Earth orbit at 200 km, shown by the planned LEO guide.
+- First flight phase: ascent through a 100 km atmosphere reference layer; second phase: smooth tangent orbital insertion into a stable circular low Earth orbit at 200 km, shown by the aligned planned LEO guide.
+- The LEO scaffold uses `7.79 km/s` at 200 km altitude, giving an orbital period of approximately `5,300 s` / `88.3 minutes`; this keeps the orbital motion and Earth rotation on a coherent `1×` launch clock.
+- Crew capsules, orbital modules, core stages, and upper stages are retained as the mission stack; boosters and escape hardware are the detachable preview components.
 - Launch-platform markers scale with the enlarged Earth (`0.6%` of Earth radius) so the geographic map remains pickable and visible.
 - Earth and Moon orbit guides scale their line thickness with Earth radius instead of retaining sub-pixel fixed widths.
 

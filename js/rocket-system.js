@@ -93,6 +93,10 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     return marker || null;
   }
 
+  function isMissionCore(component) {
+    return component.kind === 'crew-capsule' || component.kind === 'orbital-module' || component.kind === 'core-stage' || component.kind === 'upper-stage' || component.id.includes('crew-deck');
+  }
+
   function orderedComponents(vehicle) {
     const order = {'core-stage': 1, 'upper-stage': 2, 'interstage': 3, 'crew-capsule': 4, 'orbital-module': 5, 'escape-system': 6, 'escape-tower': 7};
     return vehicle.components.filter(item => item.kind !== 'booster').sort((a, b) => (order[a.kind] || 4) - (order[b.kind] || 4));
@@ -152,7 +156,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
   function updatePreviewSeparations(seconds) {
     for (const [index, component] of (selectedVehicle?.components || []).entries()) {
       const node = previewComponentNodes.get(component.id);
-      if (!node || !component.detachable || component.detachAtS == null) continue;
+      if (!node || !component.detachable || component.detachAtS == null || isMissionCore(component)) continue;
       const shouldDetach = seconds >= component.detachAtS;
       const state = previewDetachedStates.get(component.id);
       if (shouldDetach && !state) {
@@ -254,7 +258,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       stableOrbitAltitudeScene
     };
 
-    rocketRoot.metadata = {vehicleId: vehicle.id, visualBoost, heightM: vehicle.heightM, diameterM: vehicle.diameterM, visualHeightScene: vehicle.heightM * scale, visualDiameterScene: vehicle.diameterM * scale, flightProfile: {firstPhase: 'ascent through atmosphere', atmosphereTopAltitudeKm: 100, secondPhase: 'tangent orbital insertion', stableOrbitAltitudeKm: 200, insertionAngularRateRadS: .22}};
+    rocketRoot.metadata = {vehicleId: vehicle.id, visualBoost, heightM: vehicle.heightM, diameterM: vehicle.diameterM, visualHeightScene: vehicle.heightM * scale, visualDiameterScene: vehicle.diameterM * scale, flightProfile: {firstPhase: 'ascent through atmosphere', atmosphereTopAltitudeKm: 100, secondPhase: 'tangent orbital insertion', stableOrbitAltitudeKm: 200, insertionAngularRateRadS: 7.79 / (6371 + 200), orbitalVelocityKmS: 7.79, orbitalPeriodSeconds: 2 * Math.PI * (6371 + 200) / 7.79}};
     separationButtonNode.disabled = vehicle.components.every(item => !item.detachable);
     if (launchButtonNode) launchButtonNode.disabled = false;
     renderVehicleInfo(vehicle);
@@ -273,7 +277,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
   function renderVehicleInfo(vehicle) {
     const certification = vehicle.operationalCrewRating ? 'Operational human-flight architecture' : 'Crewed concept / certification not implied';
     rocketInfoNode.innerHTML = `<strong>${vehicle.name}</strong><div>${vehicle.launcher}<br>${vehicle.heightM} m tall · ${vehicle.diameterM} m diameter<br>${certification}<br><small>${vehicle.humanFlightNote}</small><br><small>Flight profile: ascent through the atmosphere → tangent orbital insertion → stable circular orbit at 200 km.</small><br><small>Rendering scale: ${visualBoost.toLocaleString()}× visual readability boost; physical dimensions remain in the vehicle metadata.</small></div>`;
-    rocketComponentsNode.innerHTML = vehicle.components.map(component => `<div class="component-row" data-component-id="${component.id}"><strong>${component.name}</strong><span>${component.heightM} m × ${component.diameterM} m · ${component.detachable ? `separates at ${component.detachAtS}s` : 'retained during flight'}</span></div>`).join('');
+    rocketComponentsNode.innerHTML = vehicle.components.map(component => `<div class="component-row" data-component-id="${component.id}"><strong>${component.name}</strong><span>${component.heightM} m × ${component.diameterM} m · ${isMissionCore(component) ? 'retained as primary crew vehicle' : component.detachable ? `separates at ${component.detachAtS}s` : 'retained during flight'}</span></div>`).join('');
   }
 
   function setRadialPose(position) {
@@ -301,6 +305,9 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     let tangent = BABYLON.Vector3.Cross(BABYLON.Vector3.Up(), startNormal);
     if (tangent.lengthSquared() < .000001) tangent = BABYLON.Vector3.Cross(BABYLON.Vector3.Right(), startNormal);
     tangent.normalize();
+    const orbitRadiusKm = 6371 + 200;
+    const orbitalVelocityKmS = 7.79;
+    const orbitAngularRate = orbitalVelocityKmS / orbitRadiusKm;
     const earthRadiusScene = window.__CELESTIAL_SYSTEM?.earthRadiusScene || earth.getBoundingInfo().boundingSphere.radius;
     launchState = {
       elapsed: 0,
@@ -312,7 +319,9 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       orbitRadius: earthRadiusScene * (1 + 200 / 6371),
       ascentDuration: 8,
       orbitDuration: 6,
-      insertionAngularRate: .22,
+      insertionAngularRate: orbitAngularRate,
+      orbitalVelocityKmS,
+      orbitalPeriodSeconds: Math.PI * 2 / orbitAngularRate,
       callbacks,
       orbitAngle: 0,
       orbitReported: false,
@@ -353,7 +362,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       phase = 'orbital-insertion';
     } else {
       phase = 'stable-leo';
-      state.orbitAngle += deltaSeconds * .22;
+      state.orbitAngle += deltaSeconds * state.insertionAngularRate;
       radius = state.orbitRadius;
     }
     if (phase !== state.phase) {
@@ -384,7 +393,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     flightSeconds = Math.max(0, seconds);
     for (const component of selectedVehicle?.components || []) {
       const node = componentNodes.get(component.id);
-      if (!node || !component.detachable || component.detachAtS == null) continue;
+      if (!node || !component.detachable || component.detachAtS == null || isMissionCore(component)) continue;
       node.setEnabled(flightSeconds < component.detachAtS);
       const row = rocketComponentsNode.querySelector(`[data-component-id="${component.id}"]`);
       row?.classList.toggle('detached', flightSeconds >= component.detachAtS);
@@ -395,7 +404,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
   }
 
   function nextSeparationTime() {
-    return Math.min(...(selectedVehicle?.components || []).filter(item => item.detachable && item.detachAtS > flightSeconds).map(item => item.detachAtS), Infinity);
+    return Math.min(...(selectedVehicle?.components || []).filter(item => item.detachable && !isMissionCore(item) && item.detachAtS > flightSeconds).map(item => item.detachAtS), Infinity);
   }
 
   separationButtonNode.addEventListener('click', () => setFlightSeconds(nextSeparationTime()));
