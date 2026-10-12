@@ -43,6 +43,12 @@ const telemetryRadiusNode = document.getElementById('telemetryRadius');
 const telemetryTraceNode = document.getElementById('telemetryTrace');
 const telemetryNoteNode = document.getElementById('telemetryNote');
 const flightViewCanvas = document.getElementById('flightViewCanvas');
+const telemetryHandleNode = document.getElementById('telemetryHandle');
+const timeControlPanelNode = document.getElementById('timeControlPanel');
+const timeControlHandleNode = document.getElementById('timeControlHandle');
+const timeRateLabelNode = document.getElementById('timeRateLabel');
+const timeControlStatusNode = document.getElementById('timeControlStatus');
+const timeButtons = [...document.querySelectorAll('[data-time-rate]')];
 
 // Expose the physical launch reference for the later wizard stages and review tooling.
 window.__ATMOSPHERE_MODEL = { constants: ATMOSPHERE, atAltitude: isaAtmosphereAt };
@@ -54,6 +60,32 @@ function fail(message) {
   errorNode.classList.remove('hidden');
   statusNode.textContent = 'rendering unavailable';
 }
+
+function makePanelMovable(panel, handle) {
+  let drag = null;
+  handle.addEventListener('pointerdown', event => {
+    const rect = panel.getBoundingClientRect();
+    panel.style.left = `${rect.left}px`;
+    panel.style.top = `${rect.top}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.style.transform = 'none';
+    drag = {x: event.clientX, y: event.clientY, left: rect.left, top: rect.top};
+    try { handle.setPointerCapture(event.pointerId); } catch (error) { /* Synthetic browser events may not own a pointer. */ }
+  });
+  handle.addEventListener('pointermove', event => {
+    if (!drag) return;
+    const maxLeft = Math.max(8, window.innerWidth - panel.offsetWidth - 8);
+    const maxTop = Math.max(8, window.innerHeight - panel.offsetHeight - 8);
+    panel.style.left = `${Math.min(maxLeft, Math.max(8, drag.left + event.clientX - drag.x))}px`;
+    panel.style.top = `${Math.min(maxTop, Math.max(8, drag.top + event.clientY - drag.y))}px`;
+  });
+  handle.addEventListener('pointerup', () => { drag = null; });
+  handle.addEventListener('pointercancel', () => { drag = null; });
+}
+
+makePanelMovable(flightTelemetryNode, telemetryHandleNode);
+makePanelMovable(timeControlPanelNode, timeControlHandleNode);
 
 if (!window.BABYLON) {
   fail('Babylon.js could not load. Check the network connection and reload the page.');
@@ -109,6 +141,18 @@ createStars(WORLD_SCALE);
 const celestial = createCelestialSystem({ BABYLON, scene, earthRadiusScene: EARTH_RADIUS_SCENE });
 const WELCOME_TIME_SCALE = 3600;
 const clock = createSimulationClock({ timeScale: WELCOME_TIME_SCALE }); // Welcome view: 1 real second advances 1 simulated hour.
+let launchTimeRate = 1;
+
+function setLaunchTimeRate(rate) {
+  launchTimeRate = Math.max(0, Number(rate) || 0);
+  clock.setTimeScale(launchTimeRate);
+  timeRateLabelNode.textContent = `${launchTimeRate}× ${launchTimeRate === 0 ? 'PAUSED' : 'REAL TIME'}`;
+  timeControlStatusNode.textContent = launchTimeRate === 0 ? 'Simulation paused. Press 1× to resume.' : `1 real second = ${launchTimeRate} simulated second${launchTimeRate === 1 ? '' : 's'}.`;
+  timeButtons.forEach(button => button.classList.toggle('selected', Number(button.dataset.timeRate) === launchTimeRate));
+}
+
+timeButtons.forEach(button => button.addEventListener('click', () => setLaunchTimeRate(button.dataset.timeRate)));
+
 celestial.update(0);
 earthTargetFix();
 
@@ -169,7 +213,8 @@ continueToRocketNode.addEventListener('click', () => {
   rocketPanelNode.classList.remove('hidden');
   const marker = launchWizard.platformMarkers.get(platform.id);
   rocketSystem.focusGround(marker);
-  statusNode.textContent = `ground focus ready · select a crewed rocket for ${platform.name}`;
+  rocketSystem.selectVehicleById('ariane-6-crew-concept');
+  statusNode.textContent = `ground focus ready · Ariane 6 crew concept loaded for ${platform.name}`;
   continueToRocketNode.textContent = 'Platform confirmed · rocket selection open';
 });
 
@@ -205,10 +250,11 @@ function restoreMoonFlightView() {
 
 launchButtonNode.addEventListener('click', () => {
   if (!rocketSystem.getSelectedVehicle?.()) return;
-  clock.setTimeScale(1);
+  setLaunchTimeRate(1);
   prepareLaunchEnvironment();
   rocketDockNode.classList.add('hidden');
   flightTelemetryNode.classList.remove('hidden');
+  timeControlPanelNode.classList.remove('hidden');
   flightView.resize();
   const started = rocketSystem.launchToOrbit({
     onPhaseChange: phase => {
@@ -248,8 +294,9 @@ window.__SIMULATION_CLOCK = clock;
 window.__CELESTIAL_SYSTEM = celestial;
 window.__SCALE_MODEL = celestial.scaleModel;
 window.__WORLD_SCALE = WORLD_SCALE;
+window.__SET_LAUNCH_TIME_RATE = setLaunchTimeRate;
 window.__ROCKET_SYSTEM = rocketSystem;
-window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); rocketSystem.stepLaunch(realDeltaSeconds); updateFlightTelemetry(); followEarthTarget(); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray(), launchState: rocketSystem.getLaunchState?.() }; };
+window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); rocketSystem.stepLaunch(realDeltaSeconds * (rocketSystem.getLaunchState?.() ? launchTimeRate : 1)); updateFlightTelemetry(); followEarthTarget(); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray(), launchState: rocketSystem.getLaunchState?.() }; };
 window.__EARTH_WELCOME = {
   earth: celestial.earth,
   moon: celestial.moon,
@@ -276,7 +323,7 @@ function renderFrame() {
   lastFrameTime = now;
   const simulationSeconds = clock.tick(realDeltaSeconds);
   celestial.update(simulationSeconds);
-  rocketSystem.stepLaunch(realDeltaSeconds);
+  rocketSystem.stepLaunch(realDeltaSeconds * (rocketSystem.getLaunchState?.() ? launchTimeRate : 1));
   updateFlightTelemetry();
   followEarthTarget();
   updateStatus();

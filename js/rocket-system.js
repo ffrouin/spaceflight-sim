@@ -388,6 +388,13 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
 
   separationButtonNode.addEventListener('click', () => setFlightSeconds(nextSeparationTime()));
 
+  function selectVehicleById(vehicleId) {
+    const button = rocketListNode.querySelector(`[data-rocket-id="${vehicleId}"]`);
+    if (!button) return false;
+    button.click();
+    return true;
+  }
+
   rocketListNode.innerHTML = vehicleCatalog.map(vehicle => `<button type="button" class="rocket-option" data-rocket-id="${vehicle.id}"><strong>${vehicle.name}</strong><span>${vehicle.country} · ${vehicle.heightM} m · ${vehicle.operationalCrewRating ? 'human-rated architecture' : 'crewed concept'}</span></button>`).join('');
   rocketListNode.querySelectorAll('.rocket-option').forEach(button => button.addEventListener('click', () => {
     const vehicle = vehicleCatalog.find(item => item.id === button.dataset.rocketId);
@@ -395,5 +402,5 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     buildRocket(vehicle);
   }));
 
-  return {buildRocket, focusGround, focusRocket, setFlightSeconds, launchToOrbit, stepLaunch, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getFlightTrace: () => ({mesh: flightTrace, pointCount: flightTracePoints.length, points: flightTracePoints.map(point => point.asArray())}), getLaunchState: () => launchState, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
+  return {buildRocket, selectVehicleById, focusGround, focusRocket, setFlightSeconds, launchToOrbit, stepLaunch, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getFlightTrace: () => ({mesh: flightTrace, pointCount: flightTracePoints.length, points: flightTracePoints.map(point => point.asArray())}), getLaunchState: () => launchState, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
 }
