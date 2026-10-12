@@ -42,9 +42,12 @@ export function createFlightView({BABYLON, canvas}) {
   function update(state) {
     lastState = state;
     const altitudeFraction = Math.min(1, Math.max(0, (state?.altitudeKm || 0) / 200));
+    const angle = state?.orbitAngle || 0;
+    earth.position.x = Math.sin(angle) * 4;
     earth.position.y = -10 - altitudeFraction * 2.5;
-    earth.position.z = 27 + altitudeFraction * 8;
+    earth.position.z = 27 + Math.cos(angle) * 8;
     atmosphere.position.copyFrom(earth.position);
+    camera.setTarget(new BABYLON.Vector3(Math.sin(angle) * .35, state?.phase === 'stable-leo' ? .12 : -.1, 10));
     reticle.rotation.z += .01;
     if (!active) {
       active = true;

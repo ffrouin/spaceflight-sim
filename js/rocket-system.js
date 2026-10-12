@@ -231,6 +231,16 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       tessellation: 160
     }, scene);
     orbitGuide.parent = earth;
+    const launchNormal = marker.position.normalizeToNew();
+    let launchTangent = BABYLON.Vector3.Cross(BABYLON.Vector3.Up(), launchNormal);
+    if (launchTangent.lengthSquared() < .000001) launchTangent = BABYLON.Vector3.Cross(BABYLON.Vector3.Right(), launchNormal);
+    launchTangent.normalize();
+    const orbitPlaneNormal = BABYLON.Vector3.Cross(launchNormal, launchTangent).normalize();
+    const orbitRotationAxis = BABYLON.Vector3.Cross(BABYLON.Vector3.Up(), orbitPlaneNormal);
+    if (orbitRotationAxis.lengthSquared() > .000001) {
+      orbitRotationAxis.normalize();
+      orbitGuide.rotationQuaternion = BABYLON.Quaternion.RotationAxis(orbitRotationAxis, Math.acos(BABYLON.Scalar.Clamp(BABYLON.Vector3.Dot(BABYLON.Vector3.Up(), orbitPlaneNormal), -1, 1)));
+    }
     const orbitMaterial = new BABYLON.StandardMaterial('planned low Earth orbit material', scene);
     orbitMaterial.emissiveColor = new BABYLON.Color3(.18, .72, 1);
     orbitMaterial.alpha = .38;
@@ -244,7 +254,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       stableOrbitAltitudeScene
     };
 
-    rocketRoot.metadata = {vehicleId: vehicle.id, visualBoost, heightM: vehicle.heightM, diameterM: vehicle.diameterM, visualHeightScene: vehicle.heightM * scale, visualDiameterScene: vehicle.diameterM * scale, flightProfile: {firstPhase: 'ascent through atmosphere', atmosphereTopAltitudeKm: 100, secondPhase: 'circular low Earth orbit', stableOrbitAltitudeKm: 200}};
+    rocketRoot.metadata = {vehicleId: vehicle.id, visualBoost, heightM: vehicle.heightM, diameterM: vehicle.diameterM, visualHeightScene: vehicle.heightM * scale, visualDiameterScene: vehicle.diameterM * scale, flightProfile: {firstPhase: 'ascent through atmosphere', atmosphereTopAltitudeKm: 100, secondPhase: 'tangent orbital insertion', stableOrbitAltitudeKm: 200, insertionAngularRateRadS: .22}};
     separationButtonNode.disabled = vehicle.components.every(item => !item.detachable);
     if (launchButtonNode) launchButtonNode.disabled = false;
     renderVehicleInfo(vehicle);
@@ -262,7 +272,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
 
   function renderVehicleInfo(vehicle) {
     const certification = vehicle.operationalCrewRating ? 'Operational human-flight architecture' : 'Crewed concept / certification not implied';
-    rocketInfoNode.innerHTML = `<strong>${vehicle.name}</strong><div>${vehicle.launcher}<br>${vehicle.heightM} m tall · ${vehicle.diameterM} m diameter<br>${certification}<br><small>${vehicle.humanFlightNote}</small><br><small>Flight profile: ascent through the atmosphere → stable circular orbit at 200 km.</small><br><small>Rendering scale: ${visualBoost.toLocaleString()}× visual readability boost; physical dimensions remain in the vehicle metadata.</small></div>`;
+    rocketInfoNode.innerHTML = `<strong>${vehicle.name}</strong><div>${vehicle.launcher}<br>${vehicle.heightM} m tall · ${vehicle.diameterM} m diameter<br>${certification}<br><small>${vehicle.humanFlightNote}</small><br><small>Flight profile: ascent through the atmosphere → tangent orbital insertion → stable circular orbit at 200 km.</small><br><small>Rendering scale: ${visualBoost.toLocaleString()}× visual readability boost; physical dimensions remain in the vehicle metadata.</small></div>`;
     rocketComponentsNode.innerHTML = vehicle.components.map(component => `<div class="component-row" data-component-id="${component.id}"><strong>${component.name}</strong><span>${component.heightM} m × ${component.diameterM} m · ${component.detachable ? `separates at ${component.detachAtS}s` : 'retained during flight'}</span></div>`).join('');
   }
 
@@ -301,7 +311,8 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       atmosphereRadius: earthRadiusScene * (1 + 100 / 6371),
       orbitRadius: earthRadiusScene * (1 + 200 / 6371),
       ascentDuration: 8,
-      orbitDuration: 20,
+      orbitDuration: 6,
+      insertionAngularRate: .22,
       callbacks,
       orbitAngle: 0,
       orbitReported: false,
@@ -336,8 +347,9 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       phase = 'atmospheric-ascent';
     } else if (state.elapsed < state.ascentDuration + state.orbitDuration) {
       const t = (state.elapsed - state.ascentDuration) / state.orbitDuration;
-      radius = BABYLON.Scalar.Lerp(state.atmosphereRadius, state.orbitRadius, t);
-      state.orbitAngle = t * Math.PI * 2;
+      const smooth = t * t * (3 - 2 * t);
+      radius = BABYLON.Scalar.Lerp(state.atmosphereRadius, state.orbitRadius, smooth);
+      state.orbitAngle = t * state.insertionAngularRate * state.orbitDuration;
       phase = 'orbital-insertion';
     } else {
       phase = 'stable-leo';

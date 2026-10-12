@@ -164,7 +164,7 @@ function earthTargetFix() {
 
 function followEarthTarget() {
   const launch = rocketSystem?.getLaunchState?.();
-  if (launch && launch.phase !== 'stable-leo' && rocketSystem.getRocketRoot?.()) {
+  if (launch && rocketSystem.getRocketRoot?.()) {
     camera.target.copyFrom(rocketSystem.getRocketRoot().getAbsolutePosition());
     return;
   }
@@ -243,9 +243,8 @@ function updateFlightTelemetry() {
 function restoreMoonFlightView() {
   [celestial.moon, celestial.sun, celestial.earthOrbit, celestial.moonOrbit].forEach(node => node?.setEnabled(true));
   camera.maxZ = EARTH_RADIUS_SCENE * 480 * 4;
-  camera.radius = 14 * WORLD_SCALE;
-  camera.setTarget(celestial.earth.getAbsolutePosition());
-  statusNode.textContent = 'stable low Earth orbit · Earth–Moon flight view restored';
+  rocketSystem.focusRocket();
+  statusNode.textContent = 'stable low Earth orbit · rocket focus retained · Earth–Moon view restored';
 }
 
 launchButtonNode.addEventListener('click', () => {
@@ -295,6 +294,7 @@ window.__CELESTIAL_SYSTEM = celestial;
 window.__SCALE_MODEL = celestial.scaleModel;
 window.__WORLD_SCALE = WORLD_SCALE;
 window.__SET_LAUNCH_TIME_RATE = setLaunchTimeRate;
+window.__FLIGHT_VIEW = flightView;
 window.__ROCKET_SYSTEM = rocketSystem;
 window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); rocketSystem.stepLaunch(realDeltaSeconds * (rocketSystem.getLaunchState?.() ? launchTimeRate : 1)); updateFlightTelemetry(); followEarthTarget(); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray(), launchState: rocketSystem.getLaunchState?.() }; };
 window.__EARTH_WELCOME = {
