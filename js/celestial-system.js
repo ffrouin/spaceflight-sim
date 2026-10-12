@@ -4,17 +4,25 @@
 
 export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   const solarRoot = new BABYLON.TransformNode('welcome solar-system root', scene);
-  const earthOrbitRadius = 9.5;
-  const moonOrbitRadius = 6.4;
-  const moonRadiusScene = earthRadiusScene * 0.2725;
+  // Main goal: keep the visible body ratios and center-to-center distances inspectable.
+  // Technique: derive every scene value from Earth radius instead of using unrelated visual guesses.
+  const EARTH_RADIUS_KM = 6371;
+  const MOON_RADIUS_KM = 1737.4;
+  const SUN_RADIUS_KM = 696340;
+  const MOON_DISTANCE_KM = 384400;
+  const ASTRONOMICAL_UNIT_KM = 149597870.7;
+  const earthOrbitRadius = earthRadiusScene * ASTRONOMICAL_UNIT_KM / EARTH_RADIUS_KM;
+  const moonOrbitRadius = earthRadiusScene * MOON_DISTANCE_KM / EARTH_RADIUS_KM;
+  const moonRadiusScene = earthRadiusScene * MOON_RADIUS_KM / EARTH_RADIUS_KM;
+  const sunRadiusScene = earthRadiusScene * SUN_RADIUS_KM / EARTH_RADIUS_KM;
   const earthOrbitPeriodSeconds = 365.256 * 86_400;
   const moonOrbitPeriodSeconds = 27.321661 * 86_400;
   const earthRotationPeriodSeconds = 86_164.0905;
 
-  const sun = BABYLON.MeshBuilder.CreateSphere('Sun reference', {diameter: .82, segments: 48}, scene);
+  const sun = BABYLON.MeshBuilder.CreateSphere('Sun reference', {diameter: sunRadiusScene * 2, segments: 48}, scene);
   sun.parent = solarRoot;
   const sunMaterial = new BABYLON.StandardMaterial('Sun reference material', scene);
-  sunMaterial.emissiveColor = new BABYLON.Color3(1, .66, .22);
+  sunMaterial.emissiveColor = new BABYLON.Color3(1, .86, .52);
   sunMaterial.disableLighting = true;
   sun.material = sunMaterial;
 
@@ -107,7 +115,16 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
 
   return {
     solarRoot, sun, earthOrbit, earthOrbitRoot, earth, moon, atmosphere, nightGlow, earthGroundMarker, moonOrbit,
-    earthMaterial, moonMaterial, earthRadiusScene, moonRadiusScene, earthOrbitRadius, moonOrbitRadius, update,
+    earthMaterial, moonMaterial, earthRadiusScene, moonRadiusScene, sunRadiusScene, earthOrbitRadius, moonOrbitRadius,
+    scaleModel: {
+      earthRadiusKm: EARTH_RADIUS_KM, moonRadiusKm: MOON_RADIUS_KM, sunRadiusKm: SUN_RADIUS_KM,
+      moonDistanceKm: MOON_DISTANCE_KM, astronomicalUnitKm: ASTRONOMICAL_UNIT_KM,
+      sunToEarthRadiusRatio: sunRadiusScene / earthRadiusScene,
+      moonToEarthRadiusRatio: moonRadiusScene / earthRadiusScene,
+      moonDistanceEarthRadii: moonOrbitRadius / earthRadiusScene,
+      earthSunDistanceEarthRadii: earthOrbitRadius / earthRadiusScene
+    },
+    update,
     texturesReady: () => Boolean(earthMaterial.albedoTexture?.isReady() && earthMaterial.bumpTexture?.isReady() && earthMaterial.metallicTexture?.isReady())
   };
 }

@@ -5,7 +5,6 @@
 import { ATMOSPHERE, isaAtmosphereAt } from './atmosphere-model.js';
 import { LAUNCH_PLATFORMS, latLonToEarthVector } from './launch-platforms.js';
 import { createLaunchWizard } from './launch-wizard.js';
-import { createSunLighting } from './sun-lighting.js';
 import { createCelestialSystem } from './celestial-system.js';
 import { createSimulationClock } from './simulation-clock.js';
 
@@ -40,22 +39,18 @@ scene.imageProcessingConfiguration.exposure = 1.12;
 scene.imageProcessingConfiguration.contrast = 1.08;
 
 // The camera initially follows Earth so the launch-site markers remain readable.
-const camera = new BABYLON.ArcRotateCamera('Earth inspection camera', -Math.PI * 0.58, Math.PI * 0.38, 9.4, BABYLON.Vector3.Zero(), scene);
+const camera = new BABYLON.ArcRotateCamera('Earth inspection camera', -Math.PI * 0.58, Math.PI * 0.38, 14, BABYLON.Vector3.Zero(), scene);
 camera.attachControl(canvas, true);
 camera.lowerRadiusLimit = 4.1;
-camera.upperRadiusLimit = 32;
+camera.upperRadiusLimit = 200000;
 camera.wheelDeltaPercentage = 0.012;
 camera.minZ = 0.01;
-camera.maxZ = 1000;
+camera.maxZ = 250000;
 
-// The Sun and a restrained fill light make the texture terminator visible without flattening it.
-const sunLight = new BABYLON.PointLight('Sun key light', new BABYLON.Vector3(-9, 5, -11), scene);
-sunLight.intensity = 2.2;
-sunLight.range = 100;
-sunLight.diffuse = new BABYLON.Color3(1, 0.93, 0.82);
-const fillLight = new BABYLON.HemisphericLight('Night-side fill', new BABYLON.Vector3(0, 1, 0), scene);
-fillLight.intensity = 0.08;
-fillLight.diffuse = new BABYLON.Color3(0.2, 0.34, 0.6);
+// A low neutral fill keeps the Earth surface inspectable without a glare post-process.
+const fillLight = new BABYLON.HemisphericLight('Neutral scene fill', new BABYLON.Vector3(0, 1, 0), scene);
+fillLight.intensity = 0.32;
+fillLight.diffuse = new BABYLON.Color3(0.38, 0.45, 0.62);
 fillLight.groundColor = new BABYLON.Color3(0.01, 0.02, 0.05);
 
 function createStars() {
@@ -80,13 +75,6 @@ function createStars() {
 
 createStars();
 const celestial = createCelestialSystem({ BABYLON, scene, earthRadiusScene: 3 });
-let sunPresentation;
-try {
-  sunPresentation = createSunLighting({ BABYLON, scene, sunMesh: celestial.sun, sunLight, atmosphereMaterial: celestial.atmosphere.material });
-} catch (error) {
-  window.__SUN_LIGHTING_ERROR = error?.stack || String(error);
-  console.error('Sun lighting setup failed', error);
-}
 const clock = createSimulationClock({ timeScale: 3600 }); // 1 real second advances 1 simulated hour for visible system motion.
 celestial.update(0);
 earthTargetFix();
@@ -94,6 +82,7 @@ earthTargetFix();
 function earthTargetFix() {
   celestial.earth.computeWorldMatrix(true);
   camera.setTarget(celestial.earth.getAbsolutePosition());
+  camera.radius = 14;
 }
 
 const platformMarkerRoot = new BABYLON.TransformNode('launch platform marker root', scene);
@@ -120,11 +109,13 @@ window.__BABYLON_SCENE = scene;
 window.__BABYLON_ENGINE = engine;
 window.__SIMULATION_CLOCK = clock;
 window.__CELESTIAL_SYSTEM = celestial;
-window.__SUN_LIGHTING = sunPresentation;
+window.__SCALE_MODEL = celestial.scaleModel;
 window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray() }; };
 window.__EARTH_WELCOME = {
   earth: celestial.earth,
   moon: celestial.moon,
+  sun: celestial.sun,
+  scaleModel: celestial.scaleModel,
   atmosphere: celestial.atmosphere,
   earthOrbit: celestial.earthOrbit,
   moonOrbit: celestial.moonOrbit,

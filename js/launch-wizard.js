@@ -76,7 +76,7 @@ export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms,
     if (focus) {
       const target = platformMarkers.get(platform.id).getAbsolutePosition();
       camera.setTarget(target);
-      camera.radius = 6.8;
+      camera.radius = 10;
     }
   }
 
