@@ -15,6 +15,7 @@ const canvas = document.getElementById('renderCanvas');
 const statusNode = document.getElementById('sceneStatus');
 const assetNode = document.getElementById('assetStatus');
 const errorNode = document.getElementById('error');
+const planetLabelNode = document.getElementById('planetLabel');
 const platformListNode = document.getElementById('platformList');
 const countrySelectNode = document.getElementById('countrySelect');
 const countryBenefitNode = document.getElementById('countryBenefit');
@@ -109,6 +110,7 @@ camera.upperRadiusLimit = 100_000_000;
 camera.wheelDeltaPercentage = 0.012;
 camera.minZ = 0.01;
 camera.maxZ = EARTH_RADIUS_SCENE * 480 * 4;
+let focusedBody = null;
 
 // A low neutral fill keeps the Earth surface inspectable without a glare post-process.
 const fillLight = new BABYLON.HemisphericLight('Neutral scene fill', new BABYLON.Vector3(0, 1, 0), scene);
@@ -168,6 +170,10 @@ function followEarthTarget() {
     camera.target.copyFrom(rocketSystem.getRocketRoot().getAbsolutePosition());
     return;
   }
+  if (focusedBody) {
+    camera.target.copyFrom(focusedBody.getAbsolutePosition());
+    return;
+  }
   const selected = launchWizard?.getSelectedPlatform?.();
   const focusNode = selected ? launchWizard.platformMarkers.get(selected.id) : celestial.earth;
   camera.target.copyFrom(focusNode?.getAbsolutePosition?.() || celestial.earth.getAbsolutePosition());
@@ -189,6 +195,7 @@ const launchWizard = createLaunchWizard({
   platformListNode, countrySelectNode, countryBenefitNode, selectedPlatformNode, statusNode, camera, markerRoot: platformMarkerRoot,
   latLonToEarthVector,
   onPlatformSelected: (platform, userInitiated) => {
+    focusedBody = null;
     updateLaunchAtmosphere(platform);
     if (userInitiated) {
       continueToRocketNode.disabled = false;
@@ -203,6 +210,42 @@ const rocketSystem = createRocketSystem({
   previewCanvas: rocketPreviewCanvas, tabletStatusNode
 });
 const flightView = createFlightView({BABYLON, canvas: flightViewCanvas});
+
+function bodyFocusRadius(body) {
+  if (body === celestial.sun) return Math.max(celestial.sunRadiusScene * 2.8, 100);
+  if (body === celestial.moon) return Math.max(celestial.moonRadiusScene * 6, 60);
+  return Math.max(celestial.earthRadiusScene * 2.8, 30);
+}
+
+function focusCelestialBody(body) {
+  focusedBody = body;
+  camera.setTarget(body.getAbsolutePosition());
+  camera.radius = bodyFocusRadius(body);
+  statusNode.textContent = `${body.metadata.celestialName} focus · click another body to change target`;
+}
+
+function pickedCelestialBody() {
+  const pick = scene.pick(scene.pointerX, scene.pointerY, mesh => Boolean(mesh?.metadata?.celestialName));
+  return pick?.hit ? pick.pickedMesh : null;
+}
+
+scene.onPointerObservable.add(pointerInfo => {
+  if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERMOVE) {
+    const body = pickedCelestialBody();
+    if (!body) {
+      planetLabelNode.classList.add('hidden');
+      return;
+    }
+    planetLabelNode.textContent = body.metadata.celestialName;
+    planetLabelNode.style.left = `${scene.pointerX}px`;
+    planetLabelNode.style.top = `${scene.pointerY}px`;
+    planetLabelNode.classList.remove('hidden');
+  }
+  if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERPICK) {
+    const body = pickedCelestialBody();
+    if (body && !rocketSystem.getLaunchState?.()) focusCelestialBody(body);
+  }
+});
 
 continueToRocketNode.addEventListener('click', () => {
   const platform = launchWizard.getSelectedPlatform();

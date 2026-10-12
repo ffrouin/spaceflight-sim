@@ -27,9 +27,12 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   const sun = BABYLON.MeshBuilder.CreateSphere('Sun reference', {diameter: sunRadiusScene * 2, segments: 48}, scene);
   sun.parent = solarRoot;
   const sunMaterial = new BABYLON.StandardMaterial('Sun reference material', scene);
+  sunMaterial.emissiveTexture = new BABYLON.Texture('assets/solar-system-scope-sun-2k.jpg', scene, true, false);
   sunMaterial.emissiveColor = new BABYLON.Color3(1, .86, .52);
   sunMaterial.disableLighting = true;
   sun.material = sunMaterial;
+  sun.isPickable = true;
+  sun.metadata = {celestialName: 'Sun', focusType: 'star'};
 
   const earthOrbit = BABYLON.MeshBuilder.CreateTorus('Earth solar orbit guide', {diameter: earthOrbitRadius * 2, thickness: Math.max(.018, earthRadiusScene * .0012), tessellation: 160}, scene);
   earthOrbit.parent = solarRoot;
@@ -56,7 +59,8 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   earthMaterial.roughness = 0.78;
   earthMaterial.environmentIntensity = 0.18;
   earth.material = earthMaterial;
-  earth.isPickable = false;
+  earth.isPickable = true;
+  earth.metadata = {celestialName: 'Earth', focusType: 'planet'};
 
   const atmosphere = BABYLON.MeshBuilder.CreateSphere('Earth atmosphere', {diameter: earthRadiusScene * 2.045, segments: 96}, scene);
   atmosphere.parent = earth;
@@ -99,10 +103,11 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   const moon = BABYLON.MeshBuilder.CreateSphere('Moon', {diameter: moonRadiusScene * 2, segments: 48}, scene);
   moon.parent = moonOrbitRoot;
   const moonMaterial = new BABYLON.PBRMaterial('Moon surface material', scene);
-  moonMaterial.albedoColor = new BABYLON.Color3(.48, .5, .54);
+  moonMaterial.albedoTexture = new BABYLON.Texture('assets/solar-system-scope-moon-2k.jpg', scene, true, false);
   moonMaterial.roughness = .94;
   moon.material = moonMaterial;
-  moon.isPickable = false;
+  moon.isPickable = true;
+  moon.metadata = {celestialName: 'Moon', focusType: 'moon'};
 
   const moonOrbit = BABYLON.MeshBuilder.CreateTorus('Moon orbit guide', {diameter: moonOrbitRadius * 2, thickness: Math.max(.014, earthRadiusScene * .003), tessellation: 128}, scene);
   moonOrbit.parent = moonOrbitRoot;

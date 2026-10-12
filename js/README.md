@@ -9,6 +9,7 @@
 - `launch-vehicles.js` — immutable crewed-vehicle and detachable-component records.
 - `rocket-system.js` — Babylon assembly, ground focus, live flight trace, tangent orbital insertion, and staged-component preview.
 - `flight-view.js` — lightweight live-linked onboard camera monitor for the telemetry panel.
+- `assets/solar-system-scope-sun-2k.jpg` and `assets/solar-system-scope-moon-2k.jpg` — Solar System Scope Sun/Moon maps, stored locally for stable Babylon loading; attribution is required under the source pack's CC BY 4.0 terms.
 
 ## Scale model
 
