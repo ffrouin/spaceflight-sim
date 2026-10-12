@@ -1,8 +1,12 @@
 # Welcome page modules
 
-- `main.js` creates the Babylon scene, camera, lighting, textured Earth, atmosphere shells, launch-platform database/markers, and runtime diagnostics.
-- Launch platforms are represented by approximate pad/complex coordinates for the first wizard pass; each entry stores country, type, operator, and source organization.
-- The atmospheric model starts at ground level (`0 m MSL`) using the International Standard Atmosphere sea-level reference values.
+- `main.js` — browser coordinator: camera, lights, launch-wizard DOM, marker picking, diagnostics, and the render loop.
+- `celestial-system.js` — Earth, Moon, Sun, atmosphere, and Earth/Moon orbit guides.
+- `launch-platforms.js` — real launch-platform records and the corrected equirectangular-texture coordinate conversion.
+- `atmosphere-model.js` — ground-zero ISA reference model.
+- `simulation-clock.js` — shared simulation time used by Earth rotation, Earth orbit, and Moon orbit.
+
+Each module begins with a short goal/technique comment so the implementation remains reviewable by a human.
 
 Runtime handles:
 

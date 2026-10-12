@@ -1,55 +1,22 @@
+// Main welcome-page coordinator.
+// Main goal: connect the Babylon scene, real launch-site selection, and one shared simulation clock.
+// Technique: keep domain logic in modules and let this file only coordinate browser/UI/runtime wiring.
+
+import { ATMOSPHERE, isaAtmosphereAt } from './atmosphere-model.js';
+import { LAUNCH_PLATFORMS, latLonToEarthVector } from './launch-platforms.js';
+import { createCelestialSystem } from './celestial-system.js';
+import { createSimulationClock } from './simulation-clock.js';
+
 const canvas = document.getElementById('renderCanvas');
 const statusNode = document.getElementById('sceneStatus');
 const assetNode = document.getElementById('assetStatus');
 const errorNode = document.getElementById('error');
+const platformListNode = document.getElementById('platformList');
+const selectedPlatformNode = document.getElementById('selectedPlatform');
 
-const ATMOSPHERE = Object.freeze({
-  referenceAltitudeM: 0,
-  earthMeanRadiusM: 6_371_000,
-  seaLevelTemperatureK: 288.15,
-  seaLevelPressurePa: 101_325,
-  seaLevelDensityKgM3: 1.225,
-  specificGasConstantAir: 287.05287,
-  gravityMps2: 9.80665,
-  lapseRateKPerM: -0.0065,
-  nitrogenFraction: 0.7808,
-  oxygenFraction: 0.2095,
-  argonFraction: 0.0093,
-  co2Fraction: 0.0004
-});
-
-const LAUNCH_PLATFORMS = Object.freeze([
-  {id:'kennedy-lc39a', name:'Kennedy Space Center · LC-39A', country:'United States', lat:28.6084, lon:-80.6043, type:'Orbital launch pad', operator:'SpaceX / NASA', source:'NASA Kennedy Space Center'},
-  {id:'cape-slc40', name:'Cape Canaveral · SLC-40', country:'United States', lat:28.5618, lon:-80.5772, type:'Orbital launch pad', operator:'SpaceX', source:'U.S. Space Force Cape Canaveral'},
-  {id:'vandenberg-slc4e', name:'Vandenberg · SLC-4E', country:'United States', lat:34.6328, lon:-120.6108, type:'Polar / orbital launch pad', operator:'SpaceX / U.S. Space Force', source:'U.S. Space Force Vandenberg'},
-  {id:'wallops-pad0a', name:'Wallops Flight Facility · Pad 0A', country:'United States', lat:37.8338, lon:-75.4881, type:'Orbital launch pad', operator:'Northrop Grumman / NASA', source:'NASA Wallops Flight Facility'},
-  {id:'pacific-spaceport-alaska', name:'Pacific Spaceport Complex · Alaska', country:'United States', lat:57.435, lon:-152.339, type:'Orbital launch complex', operator:'Alaska Aerospace', source:'Pacific Spaceport Complex Alaska'},
-  {id:'kourou-ela3', name:'Guiana Space Centre · ELA-3', country:'French Guiana', lat:5.236, lon:-52.769, type:'Orbital launch complex', operator:'Arianespace / CNES / ESA', source:'ESA Guiana Space Centre'},
-  {id:'baikonur-gagarins-start', name:'Baikonur Cosmodrome · Site 1', country:'Kazakhstan', lat:45.920, lon:63.342, type:'Orbital launch pad', operator:'Roscosmos', source:'Roscosmos Baikonur Cosmodrome'},
-  {id:'jiuquan', name:'Jiuquan Satellite Launch Center', country:'China', lat:40.960, lon:100.290, type:'Orbital launch center', operator:'China National Space Administration', source:'China National Space Administration'},
-  {id:'wenchang', name:'Wenchang Spacecraft Launch Site', country:'China', lat:19.614, lon:110.951, type:'Orbital launch site', operator:'China National Space Administration', source:'China National Space Administration'},
-  {id:'tanegashima', name:'Tanegashima Space Center', country:'Japan', lat:30.4008, lon:130.9767, type:'Orbital launch center', operator:'JAXA', source:'JAXA Tanegashima Space Center'},
-  {id:'satish-dhawan', name:'Satish Dhawan Space Centre · Sriharikota', country:'India', lat:13.7199, lon:80.2304, type:'Orbital launch center', operator:'ISRO', source:'ISRO Satish Dhawan Space Centre'},
-  {id:'rocket-lab-lc1', name:'Rocket Lab Launch Complex 1 · Mahia', country:'New Zealand', lat:-39.261, lon:177.864, type:'Orbital launch complex', operator:'Rocket Lab', source:'Rocket Lab Launch Complex 1'}
-]);
-
-function latLonToEarthVector(latitudeDeg, longitudeDeg, radius) {
-  const lat = latitudeDeg * Math.PI / 180;
-  const lon = longitudeDeg * Math.PI / 180;
-  return new BABYLON.Vector3(radius * Math.cos(lat) * Math.sin(lon), radius * Math.sin(lat), radius * Math.cos(lat) * Math.cos(lon));
-}
-
+// Expose the physical launch reference for the later wizard stages and review tooling.
+window.__ATMOSPHERE_MODEL = { constants: ATMOSPHERE, atAltitude: isaAtmosphereAt };
 window.__LAUNCH_PLATFORMS = LAUNCH_PLATFORMS;
-function isaSeaLevelModel(altitudeM = 0) {
-  const h = Math.max(0, Number(altitudeM));
-  const T = ATMOSPHERE.seaLevelTemperatureK + ATMOSPHERE.lapseRateKPerM * Math.min(h, 11_000);
-  const exponent = -ATMOSPHERE.gravityMps2 / (ATMOSPHERE.lapseRateKPerM * ATMOSPHERE.specificGasConstantAir);
-  const pressure = ATMOSPHERE.seaLevelPressurePa * Math.pow(T / ATMOSPHERE.seaLevelTemperatureK, exponent);
-  const density = pressure / (ATMOSPHERE.specificGasConstantAir * T);
-  return { altitudeM: h, temperatureK: T, pressurePa: pressure, densityKgM3: density };
-}
-
-window.__ATMOSPHERE_MODEL = { constants: ATMOSPHERE, atAltitude: isaSeaLevelModel };
 
 function fail(message) {
   errorNode.textContent = message;
@@ -68,24 +35,27 @@ scene.clearColor = new BABYLON.Color4(0.004, 0.008, 0.02, 1);
 scene.imageProcessingConfiguration.exposure = 1.12;
 scene.imageProcessingConfiguration.contrast = 1.08;
 
+// The camera initially follows Earth so the launch-site markers remain readable.
 const camera = new BABYLON.ArcRotateCamera('Earth inspection camera', -Math.PI * 0.58, Math.PI * 0.38, 9.4, BABYLON.Vector3.Zero(), scene);
 camera.attachControl(canvas, true);
 camera.lowerRadiusLimit = 4.1;
-camera.upperRadiusLimit = 28;
+camera.upperRadiusLimit = 32;
 camera.wheelDeltaPercentage = 0.012;
 camera.minZ = 0.01;
 camera.maxZ = 1000;
 
-const sun = new BABYLON.PointLight('Sun key light', new BABYLON.Vector3(-9, 5, -11), scene);
-sun.intensity = 2.2;
-sun.range = 100;
-sun.diffuse = new BABYLON.Color3(1, 0.93, 0.82);
-const fill = new BABYLON.HemisphericLight('Night-side fill', new BABYLON.Vector3(0, 1, 0), scene);
-fill.intensity = 0.08;
-fill.diffuse = new BABYLON.Color3(0.2, 0.34, 0.6);
-fill.groundColor = new BABYLON.Color3(0.01, 0.02, 0.05);
+// The Sun and a restrained fill light make the texture terminator visible without flattening it.
+const sunLight = new BABYLON.PointLight('Sun key light', new BABYLON.Vector3(-9, 5, -11), scene);
+sunLight.intensity = 2.2;
+sunLight.range = 100;
+sunLight.diffuse = new BABYLON.Color3(1, 0.93, 0.82);
+const fillLight = new BABYLON.HemisphericLight('Night-side fill', new BABYLON.Vector3(0, 1, 0), scene);
+fillLight.intensity = 0.08;
+fillLight.diffuse = new BABYLON.Color3(0.2, 0.34, 0.6);
+fillLight.groundColor = new BABYLON.Color3(0.01, 0.02, 0.05);
 
 function createStars() {
+  // A small procedural star field provides depth without competing with the globe.
   const stars = new BABYLON.ParticleSystem('welcome star field', 900, scene);
   stars.particleTexture = new BABYLON.Texture('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADElEQVR42mNk+M/wHwAF/gL+9Q2a7wAAAABJRU5ErkJggg==', scene);
   stars.minEmitBox = new BABYLON.Vector3(-70, -70, -70);
@@ -102,58 +72,22 @@ function createStars() {
   stars.direction1 = BABYLON.Vector3.Zero();
   stars.direction2 = BABYLON.Vector3.Zero();
   stars.start();
-  return stars;
 }
 
 createStars();
+const celestial = createCelestialSystem({ BABYLON, scene, earthRadiusScene: 3 });
+const clock = createSimulationClock({ timeScale: 3600 }); // 1 real second advances 1 simulated hour for visible system motion.
+celestial.update(0);
+earthTargetFix();
 
-const earthRadiusScene = 3;
-const earth = BABYLON.MeshBuilder.CreateSphere('Earth', { diameter: earthRadiusScene * 2, segments: 96 }, scene);
-const earthMaterial = new BABYLON.PBRMaterial('Earth physically based surface', scene);
-earthMaterial.albedoTexture = new BABYLON.Texture('assets/earth-day.jpg', scene, true, false);
-earthMaterial.bumpTexture = new BABYLON.Texture('assets/earth-normal.jpg', scene, true, false);
-earthMaterial.metallicTexture = new BABYLON.Texture('assets/earth-specular.jpg', scene, true, false);
-earthMaterial.metallic = 0.04;
-earthMaterial.roughness = 0.78;
-earthMaterial.environmentIntensity = 0.18;
-earth.material = earthMaterial;
-earth.isPickable = false;
+function earthTargetFix() {
+  celestial.earth.computeWorldMatrix(true);
+  camera.setTarget(celestial.earth.getAbsolutePosition());
+}
 
-const atmosphere = BABYLON.MeshBuilder.CreateSphere('Earth atmosphere', { diameter: earthRadiusScene * 2.055, segments: 96 }, scene);
-const atmosphereMaterial = new BABYLON.StandardMaterial('Earth atmosphere scattering shell', scene);
-atmosphereMaterial.diffuseColor = new BABYLON.Color3(0.12, 0.42, 1.0);
-atmosphereMaterial.emissiveColor = new BABYLON.Color3(0.08, 0.22, 0.72);
-atmosphereMaterial.alpha = 0.19;
-atmosphereMaterial.backFaceCulling = false;
-atmosphereMaterial.disableLighting = true;
-atmosphereMaterial.needDepthPrePass = true;
-atmosphereMaterial.zOffset = -2;
-atmosphere.material = atmosphereMaterial;
-atmosphere.isPickable = false;
-
-const nightGlow = BABYLON.MeshBuilder.CreateSphere('Earth limb glow', { diameter: earthRadiusScene * 2.08, segments: 64 }, scene);
-const glowMaterial = new BABYLON.StandardMaterial('Earth blue limb glow', scene);
-glowMaterial.emissiveColor = new BABYLON.Color3(0.02, 0.14, 0.7);
-glowMaterial.alpha = 0.075;
-glowMaterial.backFaceCulling = false;
-glowMaterial.disableLighting = true;
-glowMaterial.zOffset = -1;
-nightGlow.material = glowMaterial;
-nightGlow.isPickable = false;
-
-const groundMarker = BABYLON.MeshBuilder.CreateTorus('Ground zero equator reference', { diameter: earthRadiusScene * 2.008, thickness: 0.006, tessellation: 128 }, scene);
-const groundMaterial = new BABYLON.StandardMaterial('Ground zero marker material', scene);
-groundMaterial.emissiveColor = new BABYLON.Color3(0.1, 0.48, 0.8);
-groundMaterial.alpha = 0.34;
-groundMaterial.disableLighting = true;
-groundMarker.material = groundMaterial;
-groundMarker.rotation.x = Math.PI / 2;
-groundMarker.isPickable = false;
-
-const platformListNode = document.getElementById('platformList');
-const selectedPlatformNode = document.getElementById('selectedPlatform');
+// Launch markers are children of Earth, so they rotate with the textured globe and stay geographically attached.
 const platformMarkerRoot = new BABYLON.TransformNode('launch platform marker root', scene);
-platformMarkerRoot.parent = earth;
+platformMarkerRoot.parent = celestial.earth;
 const platformMarkers = new Map();
 let selectedPlatform = null;
 
@@ -179,7 +113,7 @@ function createLaunchPlatformMarkers() {
   for (const platform of LAUNCH_PLATFORMS) {
     const marker = BABYLON.MeshBuilder.CreateSphere(`launch platform · ${platform.id}`, { diameter: 0.075, segments: 16 }, scene);
     marker.parent = platformMarkerRoot;
-    marker.position.copyFrom(latLonToEarthVector(platform.lat, platform.lon, earthRadiusScene * 1.012));
+    marker.position.copyFrom(latLonToEarthVector(BABYLON, platform.lat, platform.lon, celestial.earthRadiusScene * 1.018));
     marker.isPickable = true;
     marker.metadata = { platformId: platform.id, selected: false, label: platform.name };
     const material = new BABYLON.StandardMaterial(`launch platform material · ${platform.id}`, scene);
@@ -188,6 +122,7 @@ function createLaunchPlatformMarkers() {
     material.disableLighting = true;
     marker.material = material;
     platformMarkers.set(platform.id, marker);
+
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'platform-option';
@@ -196,6 +131,8 @@ function createLaunchPlatformMarkers() {
     button.addEventListener('click', () => selectLaunchPlatform(platform));
     platformListNode.appendChild(button);
   }
+
+  // Globe clicks and list clicks share the exact same selection function.
   scene.onPointerObservable.add(pointerInfo => {
     if (pointerInfo.type !== BABYLON.PointerEventTypes.POINTERPICK) return;
     const picked = pointerInfo.pickInfo?.pickedMesh;
@@ -207,29 +144,40 @@ function createLaunchPlatformMarkers() {
 
 createLaunchPlatformMarkers();
 
-let rotation = 0;
 let textureReadyReported = false;
 function updateStatus() {
-  const ready = earthMaterial.albedoTexture?.isReady() && earthMaterial.bumpTexture?.isReady() && earthMaterial.metallicTexture?.isReady();
-  if (ready && !textureReadyReported) {
+  if (celestial.texturesReady() && !textureReadyReported) {
     textureReadyReported = true;
     assetNode.textContent = 'local Earth texture ready';
-    statusNode.textContent = 'Earth system online';
+    if (!selectedPlatform) statusNode.textContent = 'Earth–Moon system online';
   }
 }
 
+// Public diagnostics make every milestone human-reviewable in the browser console.
 window.__BABYLON_WELCOME_READY = true;
 window.__BABYLON_SCENE = scene;
 window.__BABYLON_ENGINE = engine;
-window.__EARTH_WELCOME = { earth, atmosphere, groundMarker, camera, earthRadiusScene, physicalRadiusM: ATMOSPHERE.earthMeanRadiusM, platformMarkers, getSelectedPlatform: () => selectedPlatform };
+window.__SIMULATION_CLOCK = clock;
+window.__CELESTIAL_SYSTEM = celestial;
+window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray() }; };
+window.__EARTH_WELCOME = {
+  earth: celestial.earth,
+  moon: celestial.moon,
+  atmosphere: celestial.atmosphere,
+  earthOrbit: celestial.earthOrbit,
+  moonOrbit: celestial.moonOrbit,
+  camera,
+  earthRadiusScene: celestial.earthRadiusScene,
+  moonRadiusScene: celestial.moonRadiusScene,
+  physicalRadiusM: ATMOSPHERE.earthMeanRadiusM,
+  platformMarkers,
+  getSelectedPlatform: () => selectedPlatform
+};
 
 engine.runRenderLoop(() => {
-  const dt = Math.min(engine.getDeltaTime() / 1000, 0.05);
-  rotation += dt * 0.035;
-  earth.rotation.y = rotation;
-  atmosphere.rotation.y = rotation * 0.92;
-  nightGlow.rotation.y = rotation * 0.88;
-  groundMarker.rotation.z = rotation * 0.15;
+  const realDeltaSeconds = Math.min(engine.getDeltaTime() / 1000, 0.05);
+  const simulationSeconds = clock.tick(realDeltaSeconds);
+  celestial.update(simulationSeconds);
   updateStatus();
   scene.render();
 });
