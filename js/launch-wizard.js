@@ -85,7 +85,8 @@ export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms,
     const markerDiameter = Math.max(.4, earthRadiusScene * .006);
     const marker = BABYLON.MeshBuilder.CreateSphere(`launch platform · ${platform.id}`, {diameter: markerDiameter, segments: 16}, scene);
     marker.parent = markerRoot;
-    marker.position.copyFrom(latLonToEarthVector(BABYLON, platform.lat, platform.lon, earthRadiusScene * 1.018));
+    // Place the marker center just above the solid surface; its radius straddles the ground instead of the atmosphere shell.
+    marker.position.copyFrom(latLonToEarthVector(BABYLON, platform.lat, platform.lon, earthRadiusScene * 1.003));
     marker.isPickable = true;
     marker.metadata = {platformId: platform.id, selected: false, label: platform.name};
     const material = new BABYLON.StandardMaterial(`launch platform material · ${platform.id}`, scene);
