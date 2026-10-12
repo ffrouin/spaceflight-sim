@@ -30,6 +30,7 @@ const rocketListNode = document.getElementById('rocketList');
 const rocketInfoNode = document.getElementById('rocketInfo');
 const rocketComponentsNode = document.getElementById('rocketComponents');
 const separationButtonNode = document.getElementById('previewSeparation');
+const launchButtonNode = document.getElementById('launchRocket');
 const rocketPreviewCanvas = document.getElementById('rocketPreviewCanvas');
 const tabletStatusNode = document.getElementById('tabletStatus');
 
@@ -107,6 +108,11 @@ function earthTargetFix() {
 }
 
 function followEarthTarget() {
+  const launch = rocketSystem?.getLaunchState?.();
+  if (launch && launch.phase !== 'stable-leo' && rocketSystem.getRocketRoot?.()) {
+    camera.target.copyFrom(rocketSystem.getRocketRoot().getAbsolutePosition());
+    return;
+  }
   const selected = launchWizard?.getSelectedPlatform?.();
   const focusNode = selected ? launchWizard.platformMarkers.get(selected.id) : celestial.earth;
   camera.target.copyFrom(focusNode?.getAbsolutePosition?.() || celestial.earth.getAbsolutePosition());
@@ -137,7 +143,7 @@ const launchWizard = createLaunchWizard({
   }
 });
 const rocketSystem = createRocketSystem({
-  BABYLON, scene, rocketListNode, rocketInfoNode, rocketComponentsNode, separationButtonNode,
+  BABYLON, scene, rocketListNode, rocketInfoNode, rocketComponentsNode, separationButtonNode, launchButtonNode,
   vehicleCatalog: LAUNCH_VEHICLES, camera, getSelectedPlatform: launchWizard.getSelectedPlatform, earth: celestial.earth,
   previewCanvas: rocketPreviewCanvas, tabletStatusNode
 });
@@ -153,6 +159,41 @@ continueToRocketNode.addEventListener('click', () => {
   rocketSystem.focusGround(marker);
   statusNode.textContent = `ground focus ready · select a crewed rocket for ${platform.name}`;
   continueToRocketNode.textContent = 'Platform confirmed · rocket selection open';
+});
+
+function prepareLaunchEnvironment() {
+  [celestial.moon, celestial.sun, celestial.earthOrbit, celestial.moonOrbit].forEach(node => node?.setEnabled(false));
+  camera.maxZ = EARTH_RADIUS_SCENE * 12;
+  camera.minZ = .01;
+  const marker = launchWizard.platformMarkers.get(launchWizard.getSelectedPlatform()?.id);
+  rocketSystem.focusGround(marker);
+  statusNode.textContent = 'launch frame initialized · ground to 100 km atmosphere boundary';
+}
+
+function restoreMoonFlightView() {
+  [celestial.moon, celestial.sun, celestial.earthOrbit, celestial.moonOrbit].forEach(node => node?.setEnabled(true));
+  camera.maxZ = EARTH_RADIUS_SCENE * 480 * 4;
+  camera.radius = 14 * WORLD_SCALE;
+  camera.setTarget(celestial.earth.getAbsolutePosition());
+  statusNode.textContent = 'stable low Earth orbit · Earth–Moon flight view restored';
+}
+
+launchButtonNode.addEventListener('click', () => {
+  if (!rocketSystem.getSelectedVehicle?.()) return;
+  prepareLaunchEnvironment();
+  const started = rocketSystem.launchToOrbit({
+    onPhaseChange: phase => {
+      const labels = {
+        liftoff: 'liftoff · launch frame active',
+        'atmospheric-ascent': 'atmospheric ascent · climbing toward 100 km',
+        'orbital-insertion': 'orbital insertion · targeting 200 km LEO',
+        'stable-leo': 'stable low Earth orbit achieved'
+      };
+      statusNode.textContent = labels[phase] || phase;
+    },
+    onOrbitAchieved: restoreMoonFlightView
+  });
+  if (!started) statusNode.textContent = 'select a crewed rocket before launch';
 });
 
 updateLaunchAtmosphere(launchWizard.getSelectedPlatform());
@@ -176,7 +217,7 @@ window.__CELESTIAL_SYSTEM = celestial;
 window.__SCALE_MODEL = celestial.scaleModel;
 window.__WORLD_SCALE = WORLD_SCALE;
 window.__ROCKET_SYSTEM = rocketSystem;
-window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); followEarthTarget(); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray() }; };
+window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); rocketSystem.stepLaunch(realDeltaSeconds); followEarthTarget(); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray(), launchState: rocketSystem.getLaunchState?.() }; };
 window.__EARTH_WELCOME = {
   earth: celestial.earth,
   moon: celestial.moon,
@@ -203,6 +244,7 @@ function renderFrame() {
   lastFrameTime = now;
   const simulationSeconds = clock.tick(realDeltaSeconds);
   celestial.update(simulationSeconds);
+  rocketSystem.stepLaunch(realDeltaSeconds);
   followEarthTarget();
   updateStatus();
   scene.render();

@@ -14,7 +14,7 @@ const COLORS = Object.freeze({
   'interstage': new BABYLON.Color3(.25, .3, .36)
 });
 
-export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNode, rocketComponentsNode, separationButtonNode, vehicleCatalog, camera, getSelectedPlatform, earth, previewCanvas, tabletStatusNode}) {
+export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNode, rocketComponentsNode, separationButtonNode, launchButtonNode, vehicleCatalog, camera, getSelectedPlatform, earth, previewCanvas, tabletStatusNode}) {
   const visualBoost = 5_000;
   const metersToScene = (earthRadiusScene, meters) => (earthRadiusScene * 2 / (2 * 6_371_000)) * meters * visualBoost;
   const previewEngine = previewCanvas ? new BABYLON.Engine(previewCanvas, true, {preserveDrawingBuffer: false, stencil: true}, true) : null;
@@ -42,6 +42,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
   let componentNodes = new Map();
   let orbitGuide = null;
   let flightSeconds = 0;
+  let launchState = null;
 
   function materialFor(kind, id, targetScene = scene) {
     const material = new BABYLON.StandardMaterial(`rocket material · ${id} · ${targetScene === scene ? 'world' : 'tablet'}`, targetScene);
@@ -73,9 +74,11 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     if (orbitGuide) orbitGuide.dispose(false, true);
     rocketRoot = null;
     orbitGuide = null;
+    launchState = null;
     componentNodes = new Map();
     separationButtonNode.disabled = true;
     separationButtonNode.textContent = 'Preview next separation';
+    if (launchButtonNode) launchButtonNode.disabled = true;
   }
 
   function selectedPlatformGround() {
@@ -214,7 +217,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       node.position.set(Math.cos(angle) * ring, h / 2, Math.sin(angle) * ring);
       componentNodes.set(component.id, node);
     });
-    const earthRadiusScene = earth.getBoundingInfo().boundingSphere.radius;
+    const earthRadiusScene = window.__CELESTIAL_SYSTEM?.earthRadiusScene || earth.getBoundingInfo().boundingSphere.radius;
     const atmosphereTopAltitudeScene = earthRadiusScene * 100 / 6371;
     const stableOrbitAltitudeScene = earthRadiusScene * 200 / 6371;
     orbitGuide = BABYLON.MeshBuilder.CreateTorus('planned low Earth orbit guide', {
@@ -238,6 +241,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
 
     rocketRoot.metadata = {vehicleId: vehicle.id, visualBoost, heightM: vehicle.heightM, diameterM: vehicle.diameterM, visualHeightScene: vehicle.heightM * scale, visualDiameterScene: vehicle.diameterM * scale, flightProfile: {firstPhase: 'ascent through atmosphere', atmosphereTopAltitudeKm: 100, secondPhase: 'circular low Earth orbit', stableOrbitAltitudeKm: 200}};
     separationButtonNode.disabled = vehicle.components.every(item => !item.detachable);
+    if (launchButtonNode) launchButtonNode.disabled = false;
     renderVehicleInfo(vehicle);
     renderPreview(vehicle);
     focusGround(marker, rocketRoot.metadata.visualHeightScene);
@@ -255,6 +259,81 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     const certification = vehicle.operationalCrewRating ? 'Operational human-flight architecture' : 'Crewed concept / certification not implied';
     rocketInfoNode.innerHTML = `<strong>${vehicle.name}</strong><div>${vehicle.launcher}<br>${vehicle.heightM} m tall · ${vehicle.diameterM} m diameter<br>${certification}<br><small>${vehicle.humanFlightNote}</small><br><small>Flight profile: ascent through the atmosphere → stable circular orbit at 200 km.</small><br><small>Rendering scale: ${visualBoost.toLocaleString()}× visual readability boost; physical dimensions remain in the vehicle metadata.</small></div>`;
     rocketComponentsNode.innerHTML = vehicle.components.map(component => `<div class="component-row" data-component-id="${component.id}"><strong>${component.name}</strong><span>${component.heightM} m × ${component.diameterM} m · ${component.detachable ? `separates at ${component.detachAtS}s` : 'retained during flight'}</span></div>`).join('');
+  }
+
+  function setRadialPose(position) {
+    rocketRoot.position.copyFrom(position);
+    const normal = position.normalizeToNew();
+    const rotationAxis = BABYLON.Vector3.Cross(BABYLON.Vector3.Up(), normal);
+    if (rotationAxis.lengthSquared() > .000001) {
+      rotationAxis.normalize();
+      rocketRoot.rotationQuaternion = BABYLON.Quaternion.RotationAxis(rotationAxis, Math.acos(BABYLON.Scalar.Clamp(BABYLON.Vector3.Dot(BABYLON.Vector3.Up(), normal), -1, 1)));
+    }
+  }
+
+  function launchToOrbit(callbacks = {}) {
+    if (!rocketRoot || !selectedVehicle || launchState) return false;
+    const startPosition = rocketRoot.position.clone();
+    const startNormal = startPosition.normalizeToNew();
+    let tangent = BABYLON.Vector3.Cross(BABYLON.Vector3.Up(), startNormal);
+    if (tangent.lengthSquared() < .000001) tangent = BABYLON.Vector3.Cross(BABYLON.Vector3.Right(), startNormal);
+    tangent.normalize();
+    const earthRadiusScene = window.__CELESTIAL_SYSTEM?.earthRadiusScene || earth.getBoundingInfo().boundingSphere.radius;
+    launchState = {
+      elapsed: 0,
+      phase: 'liftoff',
+      startPosition,
+      startNormal,
+      tangent,
+      atmosphereRadius: earthRadiusScene * (1 + 100 / 6371),
+      orbitRadius: earthRadiusScene * (1 + 200 / 6371),
+      ascentDuration: 8,
+      orbitDuration: 20,
+      callbacks,
+      orbitAngle: 0,
+      orbitReported: false
+    };
+    if (launchButtonNode) {
+      launchButtonNode.disabled = true;
+      launchButtonNode.textContent = 'Launch sequence active';
+    }
+    setFlightSeconds(0);
+    callbacks.onPhaseChange?.('liftoff');
+    return true;
+  }
+
+  function stepLaunch(deltaSeconds) {
+    if (!launchState || !rocketRoot) return launchState;
+    launchState.elapsed += deltaSeconds;
+    const state = launchState;
+    let radius;
+    let phase;
+    if (state.elapsed < state.ascentDuration) {
+      const t = state.elapsed / state.ascentDuration;
+      radius = BABYLON.Scalar.Lerp(state.startPosition.length(), state.atmosphereRadius, t * t);
+      phase = 'atmospheric-ascent';
+    } else if (state.elapsed < state.ascentDuration + state.orbitDuration) {
+      const t = (state.elapsed - state.ascentDuration) / state.orbitDuration;
+      radius = BABYLON.Scalar.Lerp(state.atmosphereRadius, state.orbitRadius, t);
+      state.orbitAngle = t * Math.PI * 2;
+      phase = 'orbital-insertion';
+    } else {
+      phase = 'stable-leo';
+      state.orbitAngle += deltaSeconds * .22;
+      radius = state.orbitRadius;
+    }
+    if (phase !== state.phase) {
+      state.phase = phase;
+      state.callbacks.onPhaseChange?.(phase);
+    }
+    const position = state.startNormal.scale(Math.cos(state.orbitAngle)).add(state.tangent.scale(Math.sin(state.orbitAngle))).scale(radius);
+    setRadialPose(position);
+    setFlightSeconds(Math.max(0, state.elapsed * 12));
+    if (phase === 'stable-leo' && !state.orbitReported) {
+      state.orbitReported = true;
+      state.callbacks.onOrbitAchieved?.();
+    }
+    return state;
   }
 
   function setFlightSeconds(seconds) {
@@ -284,5 +363,5 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     buildRocket(vehicle);
   }));
 
-  return {buildRocket, focusGround, setFlightSeconds, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
+  return {buildRocket, focusGround, setFlightSeconds, launchToOrbit, stepLaunch, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getLaunchState: () => launchState, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
 }
