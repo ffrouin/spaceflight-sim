@@ -301,35 +301,56 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     });
     const cabinIndex = stack.findIndex(component => component.kind === 'crew-capsule');
     if (cabinIndex < 0) return false;
-    const cabinBaseM = stack.slice(0, cabinIndex).reduce((sum, component) => sum + component.heightM, 0);
     const cabin = stack[cabinIndex];
-    const cabinTopScene = (cabinBaseM + cabin.heightM) * scale;
-    camera.parent = rocketRoot;
-    camera.position.set(0, cabinTopScene + Math.max(.02, 2 * scale), 0);
-    const rocketForward = rocketRoot.getDirection(BABYLON.Axis.Y).normalize();
-    // The camera is rigidly attached to the vehicle: it never slews toward Earth.
-    // Earth and the star field therefore move through the frame as the rocket changes heading.
+    const vehicleTopScene = stack.reduce((sum, component) => sum + component.heightM, 0) * scale;
+    const externalNoseClearanceScene = Math.max(.04, 4 * scale);
+    const lateralWindowOffsetScene = Math.max(.08, selectedVehicle.diameterM * scale * 8);
+    rocketRoot.computeWorldMatrix(true);
+    const rootWorldPosition = rocketRoot.getAbsolutePosition();
+    const rootRight = rocketRoot.getDirection(BABYLON.Axis.X).normalize();
+    const rootForward = rocketRoot.getDirection(BABYLON.Axis.Y).normalize();
+    let cameraWorldPosition = rootWorldPosition.add(rootForward.scale(vehicleTopScene + externalNoseClearanceScene)).add(rootRight.scale(lateralWindowOffsetScene));
+    const rocketBounds = rocketRoot.getHierarchyBoundingVectors(true);
+    const rocketCenter = rocketBounds.min.add(rocketBounds.max).scale(.5);
+    const rocketRadius = rocketBounds.max.subtract(rocketBounds.min).scale(.5).length();
+    const rocketOffset = cameraWorldPosition.subtract(rocketCenter);
+    if (rocketOffset.length() < rocketRadius + 2) {
+      const safeDirection = rocketOffset.length() > .000001 ? rocketOffset.normalizeToNew() : rootForward;
+      cameraWorldPosition = rocketCenter.add(safeDirection.scale(rocketRadius + 2));
+    }
+    const earthCenter = earth.getAbsolutePosition();
+    const earthRadius = window.__CELESTIAL_SYSTEM?.earthRadiusScene || earth.getBoundingInfo().boundingSphere.radius;
+    const earthOffset = cameraWorldPosition.subtract(earthCenter);
+    if (earthOffset.length() < earthRadius + 2) {
+      const safeDirection = earthOffset.length() > .000001 ? earthOffset.normalizeToNew() : rootForward;
+      cameraWorldPosition = earthCenter.add(safeDirection.scale(earthRadius + 2));
+    }
+    camera.parent = null;
+    camera.position.copyFrom(cameraWorldPosition);
+    // Keep the camera in world space to avoid precision loss from a parented camera at the enlarged Earth scale.
     const rootInverse = rocketRoot.getWorldMatrix().clone();
     rootInverse.invert();
-    const localForwardDirection = BABYLON.Vector3.TransformNormal(rocketForward, rootInverse).normalize();
+    const localForwardDirection = BABYLON.Vector3.TransformNormal(rootForward, rootInverse).normalize();
+    let localLookDirection = localForwardDirection;
     if (!crewCameraLocalLookDirection && state && (state.phase === 'orbital-insertion' || state.phase === 'stable-leo')) {
-      camera.computeWorldMatrix(true);
-      const cameraWorldPosition = camera.getWorldMatrix().getTranslation();
       const earthDirection = earth.getAbsolutePosition().subtract(cameraWorldPosition).normalize();
       const localEarthDirection = BABYLON.Vector3.TransformNormal(earthDirection, rootInverse).normalize();
-      crewCameraLocalLookDirection = localForwardDirection.scale(.35).add(localEarthDirection.scale(.94)).normalize();
+      crewCameraLocalLookDirection = localEarthDirection;
     }
-    const localLookDirection = crewCameraLocalLookDirection || localForwardDirection;
-    const cameraRotationAxis = BABYLON.Vector3.Cross(BABYLON.Axis.Z, localLookDirection);
+    localLookDirection = crewCameraLocalLookDirection || localForwardDirection;
+    const rootRotation = rocketRoot.getWorldMatrix().getRotationMatrix();
+    const worldLookDirection = BABYLON.Vector3.TransformNormal(localLookDirection, rootRotation).normalize();
+    const cameraRotationAxis = BABYLON.Vector3.Cross(BABYLON.Axis.Z, worldLookDirection);
     if (cameraRotationAxis.lengthSquared() > .000001) {
       cameraRotationAxis.normalize();
-      camera.rotationQuaternion = BABYLON.Quaternion.RotationAxis(cameraRotationAxis, Math.acos(BABYLON.Scalar.Clamp(BABYLON.Vector3.Dot(BABYLON.Axis.Z, localLookDirection), -1, 1)));
+      camera.rotationQuaternion = BABYLON.Quaternion.RotationAxis(cameraRotationAxis, Math.acos(BABYLON.Scalar.Clamp(BABYLON.Vector3.Dot(BABYLON.Axis.Z, worldLookDirection), -1, 1)));
     } else {
       camera.rotationQuaternion = BABYLON.Quaternion.Identity();
     }
+    camera.computeWorldMatrix(true);
     camera.minZ = .001;
     camera.fov = .82;
-    camera.metadata = {mount: 'ahead-of-crew-cabin', viewMode: 'rigid-earth-horizon-window', vehicleId: selectedVehicle.id, cabinComponentId: cabin.id};
+    camera.metadata = {mount: 'outside-ahead-of-crew-cabin', viewMode: 'rigid-earth-horizon-window', vehicleId: selectedVehicle.id, cabinComponentId: cabin.id, externalNoseClearanceScene, lateralWindowOffsetScene, mountDistanceScene: BABYLON.Vector3.Distance(camera.getWorldMatrix().getTranslation(), rootWorldPosition)};
     return true;
   }
 
@@ -474,5 +495,9 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     buildRocket(vehicle);
   }));
 
-  return {buildRocket, selectVehicleById, focusGround, focusRocket, updateCrewCamera, setFlightSeconds, launchToOrbit, stepLaunch, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getFlightTrace: () => ({mesh: flightTrace, pointCount: flightTracePoints.length, points: flightTracePoints.map(point => point.asArray())}), getLaunchState: () => launchState, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
+  function setCrewCameraOcclusionHidden(hidden) {
+    [rocketRoot, orbitGuide, flightTrace].forEach(node => node?.setEnabled(!hidden));
+  }
+
+  return {buildRocket, selectVehicleById, focusGround, focusRocket, updateCrewCamera, setCrewCameraOcclusionHidden, setFlightSeconds, launchToOrbit, stepLaunch, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getFlightTrace: () => ({mesh: flightTrace, pointCount: flightTracePoints.length, points: flightTracePoints.map(point => point.asArray())}), getLaunchState: () => launchState, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
 }

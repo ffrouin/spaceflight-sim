@@ -84,11 +84,13 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   const atmosphere = BABYLON.MeshBuilder.CreateSphere('Earth atmosphere', {diameter: earthRadiusScene * 2.045, segments: 96}, scene);
   atmosphere.parent = earth;
   const atmosphereMaterial = new BABYLON.StandardMaterial('Earth atmosphere scattering shell', scene);
-  atmosphereMaterial.diffuseColor = new BABYLON.Color3(.12, .42, 1);
-  atmosphereMaterial.emissiveColor = new BABYLON.Color3(.05, .16, .58);
-  atmosphereMaterial.alpha = .095;
+  // Let the shell receive the directional Sun light instead of rendering as a self-lit blue overlay.
+  atmosphereMaterial.diffuseColor = new BABYLON.Color3(.025, .08, .22);
+  atmosphereMaterial.emissiveColor = new BABYLON.Color3(.006, .018, .06);
+  atmosphereMaterial.specularColor = new BABYLON.Color3(.04, .08, .16);
+  atmosphereMaterial.alpha = .045;
   atmosphereMaterial.backFaceCulling = false;
-  atmosphereMaterial.disableLighting = true;
+  atmosphereMaterial.disableLighting = false;
   atmosphereMaterial.needDepthPrePass = true;
   atmosphereMaterial.zOffset = -2;
   atmosphere.material = atmosphereMaterial;

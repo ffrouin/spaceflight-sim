@@ -43,6 +43,7 @@ const telemetrySpeedNode = document.getElementById('telemetrySpeed');
 const telemetryRadiusNode = document.getElementById('telemetryRadius');
 const telemetryTraceNode = document.getElementById('telemetryTrace');
 const telemetryNoteNode = document.getElementById('telemetryNote');
+const inspectCrewCameraNode = document.getElementById('inspectCrewCamera');
 const flightViewCanvas = document.getElementById('flightViewCanvas');
 const telemetryHandleNode = document.getElementById('telemetryHandle');
 const timeControlPanelNode = document.getElementById('timeControlPanel');
@@ -179,6 +180,42 @@ function followEarthTarget() {
   camera.target.copyFrom(focusNode?.getAbsolutePosition?.() || celestial.earth.getAbsolutePosition());
 }
 
+function enforceMainCameraClearance() {
+  const cameraPosition = camera.globalPosition.clone();
+  const bodies = [
+    [celestial.earth, celestial.earthRadiusScene],
+    [celestial.moon, celestial.moonRadiusScene],
+    [celestial.sun, celestial.sunRadiusScene]
+  ];
+  for (const [body, radius] of bodies) {
+    if (!body?.isEnabled?.()) continue;
+    const center = body.getAbsolutePosition();
+    const offset = cameraPosition.subtract(center);
+    const distance = offset.length();
+    const minimumDistance = radius + Math.max(2, radius * .015);
+    if (distance < minimumDistance) {
+      const safeDirection = distance > .000001 ? offset.scale(1 / distance) : BABYLON.Vector3.Up();
+      camera.setPosition(center.add(safeDirection.scale(minimumDistance)));
+      cameraPosition.copyFrom(camera.globalPosition);
+    }
+  }
+  const root = rocketSystem?.getRocketRoot?.();
+  if (root?.isEnabled?.()) {
+    root.computeWorldMatrix(true);
+    const bounds = root.getHierarchyBoundingVectors(true);
+    const center = bounds.min.add(bounds.max).scale(.5);
+    const halfExtents = bounds.max.subtract(bounds.min).scale(.5);
+    const rocketRadius = halfExtents.length();
+    const offset = camera.globalPosition.subtract(center);
+    const distance = offset.length();
+    const minimumDistance = rocketRadius + Math.max(2, rocketRadius * .08);
+    if (distance < minimumDistance) {
+      const safeDirection = distance > .000001 ? offset.scale(1 / distance) : BABYLON.Vector3.Up();
+      camera.setPosition(center.add(safeDirection.scale(minimumDistance)));
+    }
+  }
+}
+
 function updateLaunchAtmosphere(platform) {
   const altitudeM = platform.elevationM ?? 0;
   const atmosphere = isaAtmosphereAt(altitudeM);
@@ -191,7 +228,7 @@ function updateLaunchAtmosphere(platform) {
 const platformMarkerRoot = new BABYLON.TransformNode('launch platform marker root', scene);
 platformMarkerRoot.parent = celestial.earth;
 const launchWizard = createLaunchWizard({
-  BABYLON, scene, earthRadiusScene: celestial.earthRadiusScene, platforms: LAUNCH_PLATFORMS,
+  BABYLON, scene, earthRadiusScene: celestial.earthRadiusScene, platforms: LAUNCH_PLATFORMS, defaultPlatformId: 'kourou-ela3',
   platformListNode, countrySelectNode, countryBenefitNode, selectedPlatformNode, statusNode, camera, markerRoot: platformMarkerRoot,
   latLonToEarthVector,
   onPlatformSelected: (platform, userInitiated) => {
@@ -204,6 +241,9 @@ const launchWizard = createLaunchWizard({
     }
   }
 });
+const defaultLaunchPlatform = launchWizard.getSelectedPlatform();
+continueToRocketNode.disabled = !defaultLaunchPlatform;
+continueToRocketNode.textContent = defaultLaunchPlatform ? 'Continue · choose a crewed rocket' : 'Select a launch platform first';
 const rocketSystem = createRocketSystem({
   BABYLON, scene, rocketListNode, rocketInfoNode, rocketComponentsNode, separationButtonNode, launchButtonNode,
   vehicleCatalog: LAUNCH_VEHICLES, camera, getSelectedPlatform: launchWizard.getSelectedPlatform, earth: celestial.earth,
@@ -212,7 +252,31 @@ const rocketSystem = createRocketSystem({
 const crewCabinCamera = new BABYLON.FreeCamera('crew cabin camera · main Babylon scene', new BABYLON.Vector3(0, 0, 0), scene);
 crewCabinCamera.minZ = .001;
 crewCabinCamera.fov = .82;
-const flightView = createFlightView({BABYLON, canvas: flightViewCanvas});
+let inspectingCrewCamera = false;
+function setCrewCameraInspection(enabled) {
+  inspectingCrewCamera = Boolean(enabled);
+  if (inspectingCrewCamera) {
+    camera.detachControl(canvas);
+    scene.activeCamera = crewCabinCamera;
+    rocketSystem.setCrewCameraOcclusionHidden(true);
+    celestial.atmosphere.setEnabled(false);
+    celestial.nightGlow.setEnabled(false);
+    celestial.earthClouds.setEnabled(false);
+    inspectCrewCameraNode.textContent = 'Return to external flight camera';
+    statusNode.textContent = 'real crew cabin camera · main Babylon scene';
+  } else {
+    scene.activeCamera = camera;
+    rocketSystem.setCrewCameraOcclusionHidden(false);
+    celestial.atmosphere.setEnabled(true);
+    celestial.nightGlow.setEnabled(true);
+    celestial.earthClouds.setEnabled(true);
+    camera.attachControl(canvas, true);
+    inspectCrewCameraNode.textContent = 'Inspect real crew camera';
+    statusNode.textContent = 'external flight camera · rocket focus retained';
+  }
+}
+inspectCrewCameraNode.addEventListener('click', () => setCrewCameraInspection(!inspectingCrewCamera));
+const flightView = createFlightView({canvas: flightViewCanvas, sourceCanvas: canvas});
 
 function bodyFocusRadius(body) {
   if (body === celestial.sun) return Math.max(celestial.sunRadiusScene * 2.8, 100);
@@ -283,8 +347,28 @@ function updateFlightTelemetry() {
   telemetryRadiusNode.textContent = `${state.radiusKm.toFixed(1)} km`;
   telemetryTraceNode.textContent = `${rocketSystem.getFlightTrace?.().pointCount || 0} points`;
   rocketSystem.updateCrewCamera(crewCabinCamera, state);
-  flightView.update(state, crewCabinCamera, celestial.earth.getAbsolutePosition(), rocketSystem.getRocketRoot()?.getAbsolutePosition());
-  telemetryNoteNode.textContent = state.phase === 'stable-leo' ? 'Rigid crew-cabin camera active. Earth and fixed stars move through the forward window with orbital heading.' : 'Rigid crew-cabin camera active. Forward view follows the live vehicle attitude.';
+  flightView.update(state);
+  telemetryNoteNode.textContent = state.phase === 'stable-leo' ? 'Real crew-cabin camera view. Earth and vehicle attitude are rendered from the live Babylon camera.' : 'Real crew-cabin camera view. Forward window follows the live vehicle attitude.';
+}
+
+function renderCrewTrackingFrame() {
+  const previousCamera = scene.activeCamera;
+  const alreadyInspecting = inspectingCrewCamera;
+  const environmentNodes = [celestial.atmosphere, celestial.nightGlow, celestial.earthClouds];
+  const environmentState = environmentNodes.map(node => [node, node?.isEnabled?.() ?? false]);
+  if (!alreadyInspecting) {
+    scene.activeCamera = crewCabinCamera;
+    rocketSystem.setCrewCameraOcclusionHidden(true);
+    environmentNodes.forEach(node => node?.setEnabled(false));
+  }
+  scene.render();
+  flightView.mirror();
+  if (!alreadyInspecting) {
+    rocketSystem.setCrewCameraOcclusionHidden(false);
+    environmentState.forEach(([node, enabled]) => node?.setEnabled(enabled));
+    scene.activeCamera = previousCamera;
+    scene.render();
+  }
 }
 
 function restoreMoonFlightView() {
@@ -345,7 +429,7 @@ window.__SET_LAUNCH_TIME_RATE = setLaunchTimeRate;
 window.__FLIGHT_VIEW = flightView;
 window.__CREW_CABIN_CAMERA = crewCabinCamera;
 window.__ROCKET_SYSTEM = rocketSystem;
-window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); rocketSystem.stepLaunch(realDeltaSeconds * (rocketSystem.getLaunchState?.() ? launchTimeRate : 1)); updateFlightTelemetry(); followEarthTarget(); scene.render(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray(), launchState: rocketSystem.getLaunchState?.() }; };
+window.__STEP_SIMULATION = (realDeltaSeconds = 1 / 60) => { const simulationSeconds = clock.tick(realDeltaSeconds); celestial.update(simulationSeconds); rocketSystem.stepLaunch(realDeltaSeconds * (rocketSystem.getLaunchState?.() ? launchTimeRate : 1)); updateFlightTelemetry(); followEarthTarget(); enforceMainCameraClearance(); renderCrewTrackingFrame(); return { simulationSeconds, moonPosition: celestial.moon.getAbsolutePosition().asArray(), earthPosition: celestial.earth.getAbsolutePosition().asArray(), launchState: rocketSystem.getLaunchState?.() }; };
 window.__EARTH_WELCOME = {
   earth: celestial.earth,
   moon: celestial.moon,
@@ -376,7 +460,8 @@ function renderFrame() {
   updateFlightTelemetry();
   followEarthTarget();
   updateStatus();
-  scene.render();
+  enforceMainCameraClearance();
+  renderCrewTrackingFrame();
 }
 // A timer-backed loop keeps the simulation advancing even in hosts that suspend Babylon's RAF loop.
 renderFrame();

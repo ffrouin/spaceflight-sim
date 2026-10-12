@@ -27,7 +27,7 @@ const PLATFORM_BENEFITS = Object.freeze({
   'rocket-lab-lc1': 'Open-ocean eastward corridor and southern latitude support for constellation and high-inclination missions.'
 });
 
-export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms, platformListNode, countrySelectNode, countryBenefitNode, selectedPlatformNode, statusNode, camera, markerRoot, latLonToEarthVector, onPlatformSelected = () => {}}) {
+export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms, defaultPlatformId = null, platformListNode, countrySelectNode, countryBenefitNode, selectedPlatformNode, statusNode, camera, markerRoot, latLonToEarthVector, onPlatformSelected = () => {}}) {
   const platformMarkers = new Map();
   let selectedPlatform = null;
   let selectedCountry = '';
@@ -109,6 +109,8 @@ export function createLaunchWizard({BABYLON, scene, earthRadiusScene, platforms,
     if (platform) selectPlatform(platform, true, true);
   });
 
-  renderCountry(countries[0]);
+  const initialPlatform = platforms.find(platform => platform.id === defaultPlatformId) || platforms[0];
+  renderCountry(initialPlatform.country);
+  selectPlatform(initialPlatform, false);
   return {platformMarkers, getSelectedPlatform: () => selectedPlatform, getSelectedCountry: () => selectedCountry, selectPlatform, renderCountry, platformBenefit, setMarkersVisible};
 }
