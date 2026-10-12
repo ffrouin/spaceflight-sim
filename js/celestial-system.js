@@ -21,6 +21,7 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   const earthOrbitPeriodSeconds = 365.256 * 86_400;
   const moonOrbitPeriodSeconds = 27.321661 * 86_400;
   const earthRotationPeriodSeconds = 86_164.0905;
+  const cloudRotationMultiplier = 1.0002;
   const earthAxialTiltDeg = 23.439;
   const moonOrbitalInclinationDeg = 5.145;
 
@@ -130,6 +131,24 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   moon.isPickable = true;
   moon.metadata = {celestialName: 'Moon', focusType: 'moon'};
 
+  function createCelestialHoverProxy(target, radius, multiplier) {
+    const proxy = BABYLON.MeshBuilder.CreateSphere(`${target.name} hover target`, {diameter: radius * 2 * multiplier, segments: 16}, scene);
+    proxy.parent = target;
+    proxy.position.copyFrom(BABYLON.Vector3.Zero());
+    const proxyMaterial = new BABYLON.StandardMaterial(`${target.name} hover target material`, scene);
+    proxyMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
+    proxyMaterial.alpha = 0;
+    proxyMaterial.disableLighting = true;
+    proxyMaterial.backFaceCulling = false;
+    proxy.material = proxyMaterial;
+    proxy.isPickable = true;
+    proxy.metadata = {celestialName: target.metadata.celestialName, focusType: target.metadata.focusType, celestialTarget: target, hoverProxy: true};
+    return proxy;
+  }
+
+  const earthHoverProxy = createCelestialHoverProxy(earth, earthRadiusScene, 1.06);
+  const moonHoverProxy = createCelestialHoverProxy(moon, moonRadiusScene, 2.4);
+
   const moonOrbit = BABYLON.MeshBuilder.CreateTorus('Moon orbit guide', {diameter: moonOrbitRadius * 2, thickness: Math.max(.014, earthRadiusScene * .003), tessellation: 128}, scene);
   moonOrbit.parent = moonOrbitRoot;
   const moonOrbitMaterial = new BABYLON.StandardMaterial('Moon orbit guide material', scene);
@@ -189,7 +208,7 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
     const earthSpin = simulationSeconds / earthRotationPeriodSeconds * Math.PI * 2;
     earthOrbitRoot.rotation.y = earthAngle;
     earth.rotation.y = earthSpin;
-    earthClouds.rotation.y = earthSpin * 1.002;
+    earthClouds.rotation.y = earthSpin * cloudRotationMultiplier;
     nightGlow.rotation.y = earthSpin * .88;
     earthGroundMarker.rotation.z = earthSpin * .15;
     moon.position.set(Math.cos(moonAngle) * moonOrbitRadius, 0.16 * Math.sin(moonAngle * .5), Math.sin(moonAngle) * moonOrbitRadius);
@@ -204,9 +223,9 @@ export function createCelestialSystem({BABYLON, scene, earthRadiusScene = 3}) {
   };
 
   return {
-    solarRoot, sun, sunLight, moonShadow, earthOrbit, earthOrbitRoot, earthFrame, earth, earthClouds, atmosphere, nightGlow, earthGroundMarker, moonOrbitRoot, moon, moonOrbit,
+    solarRoot, sun, earthHoverProxy, moonHoverProxy, sunLight, moonShadow, earthOrbit, earthOrbitRoot, earthFrame, earth, earthClouds, atmosphere, nightGlow, earthGroundMarker, moonOrbitRoot, moon, moonOrbit,
     earthMaterial, earthCloudMaterial, moonMaterial, earthRadiusScene, moonRadiusScene, sunRadiusScene, earthOrbitRadius, moonOrbitRadius,
-    earthAxialTiltDeg, moonOrbitalInclinationDeg,
+    earthAxialTiltDeg, moonOrbitalInclinationDeg, cloudRotationMultiplier,
     scaleModel: {
       earthRadiusKm: EARTH_RADIUS_KM, moonRadiusKm: MOON_RADIUS_KM, sunRadiusKm: SUN_RADIUS_KM,
       moonDistanceKm: MOON_DISTANCE_KM, astronomicalUnitKm: ASTRONOMICAL_UNIT_KM,

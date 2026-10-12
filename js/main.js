@@ -142,8 +142,8 @@ function createStars(worldScale = 1) {
 
 createStars(WORLD_SCALE);
 const celestial = createCelestialSystem({ BABYLON, scene, earthRadiusScene: EARTH_RADIUS_SCENE });
-const WELCOME_TIME_SCALE = 600;
-const clock = createSimulationClock({ timeScale: WELCOME_TIME_SCALE }); // Welcome view: 1 real second advances 10 simulated minutes.
+const WELCOME_TIME_SCALE = 60;
+const clock = createSimulationClock({ timeScale: WELCOME_TIME_SCALE }); // Welcome view: 1 real second advances 1 simulated minute.
 let launchTimeRate = 1;
 
 function setLaunchTimeRate(rate) {
@@ -293,7 +293,7 @@ function focusCelestialBody(body) {
 
 function pickedCelestialBody() {
   const pick = scene.pick(scene.pointerX, scene.pointerY, mesh => Boolean(mesh?.metadata?.celestialName));
-  return pick?.hit ? pick.pickedMesh : null;
+  return pick?.hit ? (pick.pickedMesh.metadata.celestialTarget || pick.pickedMesh) : null;
 }
 
 scene.onPointerObservable.add(pointerInfo => {
