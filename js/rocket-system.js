@@ -317,7 +317,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       const cameraWorldPosition = camera.getWorldMatrix().getTranslation();
       const earthDirection = earth.getAbsolutePosition().subtract(cameraWorldPosition).normalize();
       const localEarthDirection = BABYLON.Vector3.TransformNormal(earthDirection, rootInverse).normalize();
-      crewCameraLocalLookDirection = localForwardDirection.scale(.78).add(localEarthDirection.scale(.63)).normalize();
+      crewCameraLocalLookDirection = localForwardDirection.scale(.35).add(localEarthDirection.scale(.94)).normalize();
     }
     const localLookDirection = crewCameraLocalLookDirection || localForwardDirection;
     const cameraRotationAxis = BABYLON.Vector3.Cross(BABYLON.Axis.Z, localLookDirection);
@@ -329,7 +329,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     }
     camera.minZ = .001;
     camera.fov = .82;
-    camera.metadata = {mount: 'ahead-of-crew-cabin', viewMode: 'rigid-forward-flight-vector', vehicleId: selectedVehicle.id, cabinComponentId: cabin.id};
+    camera.metadata = {mount: 'ahead-of-crew-cabin', viewMode: 'rigid-earth-horizon-window', vehicleId: selectedVehicle.id, cabinComponentId: cabin.id};
     return true;
   }
 
