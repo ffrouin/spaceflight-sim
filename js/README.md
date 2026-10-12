@@ -11,15 +11,16 @@
 
 ## Scale model
 
-`celestial-system.js` derives scene geometry from Earth radius rather than arbitrary visual values. The browser world unit is enlarged by `2,500×` for close inspection of physically ratioed launcher components:
+`celestial-system.js` derives scene geometry from Earth radius rather than arbitrary visual values. The browser world unit is enlarged by `333×` for a wide Earth/atmosphere launch frame while keeping the rocket silhouette much smaller than the planet:
 
-- Earth radius: 6,371 km reference → `7,500` scene units
+- Earth radius: 6,371 km reference → `999` scene units
 - Moon radius: 1,737.4 km reference (`0.2727×` Earth radius)
 - Sun radius: 696,340 km reference (`109.30×` Earth radius)
 - Moon center distance: 384,400 km (`60.34×` Earth radius)
 - Earth–Sun visual distance: `480×` Earth radius (bounded presentation scale)
 - Earth–Sun physical distance: 1 AU (`23,481.07×` Earth radius)
-- Rocket component rendering threshold: approximately `17.66` scene units per physical metre before local geometry modifiers; the smallest catalogued 1.1 m escape tower is therefore above `5` scene units in diameter.
+- Rocket component rendering: a `5,000×` readability boost is applied only to launcher meshes; physical dimensions remain authoritative in the vehicle catalog, while Earth size, atmosphere thickness, and the 200 km LEO target remain separate diagnostics.
+- First flight phase: ascent through a 100 km atmosphere reference layer; second phase: stable circular low Earth orbit at 200 km, shown by the planned LEO guide.
 
 - Earth axial tilt: `23.439°`
 - Moon orbital inclination: `5.145°`

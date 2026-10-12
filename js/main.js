@@ -51,7 +51,7 @@ scene.clearColor = new BABYLON.Color4(0.004, 0.008, 0.02, 1);
 scene.imageProcessingConfiguration.exposure = 1.12;
 scene.imageProcessingConfiguration.contrast = 1.08;
 
-const WORLD_SCALE = 2_500;
+const WORLD_SCALE = 333;
 const EARTH_RADIUS_SCENE = 3 * WORLD_SCALE;
 
 // The camera starts in the same enlarged world unit system as the celestial bodies.

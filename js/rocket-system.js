@@ -15,11 +15,12 @@ const COLORS = Object.freeze({
 });
 
 export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNode, rocketComponentsNode, separationButtonNode, vehicleCatalog, camera, getSelectedPlatform, earth}) {
-  const visualBoost = 15_000;
+  const visualBoost = 5_000;
   const metersToScene = (earthRadiusScene, meters) => (earthRadiusScene * 2 / (2 * 6_371_000)) * meters * visualBoost;
   let selectedVehicle = null;
   let rocketRoot = null;
   let componentNodes = new Map();
+  let orbitGuide = null;
   let flightSeconds = 0;
 
   function materialFor(kind, id) {
@@ -49,7 +50,9 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
 
   function clearRocket() {
     if (rocketRoot) rocketRoot.dispose(false, true);
+    if (orbitGuide) orbitGuide.dispose(false, true);
     rocketRoot = null;
+    orbitGuide = null;
     componentNodes = new Map();
     separationButtonNode.disabled = true;
     separationButtonNode.textContent = 'Preview next separation';
@@ -102,7 +105,29 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       node.position.set(Math.cos(angle) * ring, h / 2, Math.sin(angle) * ring);
       componentNodes.set(component.id, node);
     });
-    rocketRoot.metadata = {vehicleId: vehicle.id, visualBoost, heightM: vehicle.heightM, diameterM: vehicle.diameterM, visualHeightScene: vehicle.heightM * scale, visualDiameterScene: vehicle.diameterM * scale};
+    const earthRadiusScene = earth.getBoundingInfo().boundingSphere.radius;
+    const atmosphereTopAltitudeScene = earthRadiusScene * 100 / 6371;
+    const stableOrbitAltitudeScene = earthRadiusScene * 200 / 6371;
+    orbitGuide = BABYLON.MeshBuilder.CreateTorus('planned low Earth orbit guide', {
+      diameter: (earthRadiusScene + stableOrbitAltitudeScene) * 2,
+      thickness: Math.max(.02, earthRadiusScene * .001),
+      tessellation: 160
+    }, scene);
+    orbitGuide.parent = earth;
+    const orbitMaterial = new BABYLON.StandardMaterial('planned low Earth orbit material', scene);
+    orbitMaterial.emissiveColor = new BABYLON.Color3(.18, .72, 1);
+    orbitMaterial.alpha = .38;
+    orbitMaterial.disableLighting = true;
+    orbitGuide.material = orbitMaterial;
+    orbitGuide.metadata = {
+      orbitType: 'planned-low-earth-orbit',
+      atmosphereTopAltitudeKm: 100,
+      stableOrbitAltitudeKm: 200,
+      atmosphereTopAltitudeScene,
+      stableOrbitAltitudeScene
+    };
+
+    rocketRoot.metadata = {vehicleId: vehicle.id, visualBoost, heightM: vehicle.heightM, diameterM: vehicle.diameterM, visualHeightScene: vehicle.heightM * scale, visualDiameterScene: vehicle.diameterM * scale, flightProfile: {firstPhase: 'ascent through atmosphere', atmosphereTopAltitudeKm: 100, secondPhase: 'circular low Earth orbit', stableOrbitAltitudeKm: 200}};
     separationButtonNode.disabled = vehicle.components.every(item => !item.detachable);
     renderVehicleInfo(vehicle);
     focusGround(marker, rocketRoot.metadata.visualHeightScene);
@@ -118,7 +143,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
 
   function renderVehicleInfo(vehicle) {
     const certification = vehicle.operationalCrewRating ? 'Operational human-flight architecture' : 'Crewed concept / certification not implied';
-    rocketInfoNode.innerHTML = `<strong>${vehicle.name}</strong><div>${vehicle.launcher}<br>${vehicle.heightM} m tall · ${vehicle.diameterM} m diameter<br>${certification}<br><small>${vehicle.humanFlightNote}</small><br><small>Visual readability boost: ${visualBoost.toLocaleString()}× over physical Earth-relative mesh scale.</small></div>`;
+    rocketInfoNode.innerHTML = `<strong>${vehicle.name}</strong><div>${vehicle.launcher}<br>${vehicle.heightM} m tall · ${vehicle.diameterM} m diameter<br>${certification}<br><small>${vehicle.humanFlightNote}</small><br><small>Flight profile: ascent through the atmosphere → stable circular orbit at 200 km.</small><br><small>Rendering scale: ${visualBoost.toLocaleString()}× visual readability boost; physical dimensions remain in the vehicle metadata.</small></div>`;
     rocketComponentsNode.innerHTML = vehicle.components.map(component => `<div class="component-row" data-component-id="${component.id}"><strong>${component.name}</strong><span>${component.heightM} m × ${component.diameterM} m · ${component.detachable ? `separates at ${component.detachAtS}s` : 'retained during flight'}</span></div>`).join('');
   }
 
@@ -148,5 +173,5 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     buildRocket(vehicle);
   }));
 
-  return {buildRocket, focusGround, setFlightSeconds, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getFlightSeconds: () => flightSeconds, visualBoost};
+  return {buildRocket, focusGround, setFlightSeconds, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
 }
