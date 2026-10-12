@@ -18,8 +18,10 @@
 - Earth–Sun visual distance: `480×` Earth radius (bounded presentation scale)
 - Earth–Sun physical distance: 1 AU (`23,481.07×` Earth radius)
 
-The Sun diameter and Earth/Moon diameter ratios remain physical. The Earth–Sun distance is intentionally compressed for stable browser rendering; the physical value remains exposed in `window.__SCALE_MODEL.physicalEarthSunDistanceEarthRadii`.
+- Earth axial tilt: `23.439°`
+- Moon orbital inclination: `5.145°`
 
+The Sun diameter and Earth/Moon diameter ratios remain physical. The Earth–Sun distance is intentionally compressed for stable browser rendering; the physical value remains exposed in `window.__SCALE_MODEL.physicalEarthSunDistanceEarthRadii`. The directional Sun light follows the current Sun-to-Earth vector and illuminates the textured Earth without any glare post-process. At new Moon, a physically scaled penumbra marker is placed on the Earth surface; its radius is derived from Moon radius, Earth radius, and the Moon center distance, rather than an arbitrary screen-sized decal.
 Each module begins with a short goal/technique comment so the implementation remains reviewable by a human.
 
 Runtime handles:

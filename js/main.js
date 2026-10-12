@@ -49,7 +49,7 @@ camera.maxZ = 250000;
 
 // A low neutral fill keeps the Earth surface inspectable without a glare post-process.
 const fillLight = new BABYLON.HemisphericLight('Neutral scene fill', new BABYLON.Vector3(0, 1, 0), scene);
-fillLight.intensity = 0.32;
+fillLight.intensity = 0.08;
 fillLight.diffuse = new BABYLON.Color3(0.38, 0.45, 0.62);
 fillLight.groundColor = new BABYLON.Color3(0.01, 0.02, 0.05);
 
