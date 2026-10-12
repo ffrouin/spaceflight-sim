@@ -18,6 +18,28 @@ const ATMOSPHERE = Object.freeze({
   co2Fraction: 0.0004
 });
 
+const LAUNCH_PLATFORMS = Object.freeze([
+  {id:'kennedy-lc39a', name:'Kennedy Space Center · LC-39A', country:'United States', lat:28.6084, lon:-80.6043, type:'Orbital launch pad', operator:'SpaceX / NASA', source:'NASA Kennedy Space Center'},
+  {id:'cape-slc40', name:'Cape Canaveral · SLC-40', country:'United States', lat:28.5618, lon:-80.5772, type:'Orbital launch pad', operator:'SpaceX', source:'U.S. Space Force Cape Canaveral'},
+  {id:'vandenberg-slc4e', name:'Vandenberg · SLC-4E', country:'United States', lat:34.6328, lon:-120.6108, type:'Polar / orbital launch pad', operator:'SpaceX / U.S. Space Force', source:'U.S. Space Force Vandenberg'},
+  {id:'wallops-pad0a', name:'Wallops Flight Facility · Pad 0A', country:'United States', lat:37.8338, lon:-75.4881, type:'Orbital launch pad', operator:'Northrop Grumman / NASA', source:'NASA Wallops Flight Facility'},
+  {id:'pacific-spaceport-alaska', name:'Pacific Spaceport Complex · Alaska', country:'United States', lat:57.435, lon:-152.339, type:'Orbital launch complex', operator:'Alaska Aerospace', source:'Pacific Spaceport Complex Alaska'},
+  {id:'kourou-ela3', name:'Guiana Space Centre · ELA-3', country:'French Guiana', lat:5.236, lon:-52.769, type:'Orbital launch complex', operator:'Arianespace / CNES / ESA', source:'ESA Guiana Space Centre'},
+  {id:'baikonur-gagarins-start', name:'Baikonur Cosmodrome · Site 1', country:'Kazakhstan', lat:45.920, lon:63.342, type:'Orbital launch pad', operator:'Roscosmos', source:'Roscosmos Baikonur Cosmodrome'},
+  {id:'jiuquan', name:'Jiuquan Satellite Launch Center', country:'China', lat:40.960, lon:100.290, type:'Orbital launch center', operator:'China National Space Administration', source:'China National Space Administration'},
+  {id:'wenchang', name:'Wenchang Spacecraft Launch Site', country:'China', lat:19.614, lon:110.951, type:'Orbital launch site', operator:'China National Space Administration', source:'China National Space Administration'},
+  {id:'tanegashima', name:'Tanegashima Space Center', country:'Japan', lat:30.4008, lon:130.9767, type:'Orbital launch center', operator:'JAXA', source:'JAXA Tanegashima Space Center'},
+  {id:'satish-dhawan', name:'Satish Dhawan Space Centre · Sriharikota', country:'India', lat:13.7199, lon:80.2304, type:'Orbital launch center', operator:'ISRO', source:'ISRO Satish Dhawan Space Centre'},
+  {id:'rocket-lab-lc1', name:'Rocket Lab Launch Complex 1 · Mahia', country:'New Zealand', lat:-39.261, lon:177.864, type:'Orbital launch complex', operator:'Rocket Lab', source:'Rocket Lab Launch Complex 1'}
+]);
+
+function latLonToEarthVector(latitudeDeg, longitudeDeg, radius) {
+  const lat = latitudeDeg * Math.PI / 180;
+  const lon = longitudeDeg * Math.PI / 180;
+  return new BABYLON.Vector3(radius * Math.cos(lat) * Math.sin(lon), radius * Math.sin(lat), radius * Math.cos(lat) * Math.cos(lon));
+}
+
+window.__LAUNCH_PLATFORMS = LAUNCH_PLATFORMS;
 function isaSeaLevelModel(altitudeM = 0) {
   const h = Math.max(0, Number(altitudeM));
   const T = ATMOSPHERE.seaLevelTemperatureK + ATMOSPHERE.lapseRateKPerM * Math.min(h, 11_000);
@@ -128,6 +150,63 @@ groundMarker.material = groundMaterial;
 groundMarker.rotation.x = Math.PI / 2;
 groundMarker.isPickable = false;
 
+const platformListNode = document.getElementById('platformList');
+const selectedPlatformNode = document.getElementById('selectedPlatform');
+const platformMarkerRoot = new BABYLON.TransformNode('launch platform marker root', scene);
+platformMarkerRoot.parent = earth;
+const platformMarkers = new Map();
+let selectedPlatform = null;
+
+function selectLaunchPlatform(platform, focus = true) {
+  selectedPlatform = platform;
+  for (const [id, marker] of platformMarkers) {
+    const active = id === platform.id;
+    marker.material.emissiveColor = active ? new BABYLON.Color3(0.3, 1, 0.68) : new BABYLON.Color3(0.08, 0.55, 0.95);
+    marker.scaling.setAll(active ? 1.55 : 1);
+    marker.metadata.selected = active;
+  }
+  document.querySelectorAll('.platform-option').forEach(button => button.classList.toggle('selected', button.dataset.platformId === platform.id));
+  selectedPlatformNode.innerHTML = `<strong>${platform.name}</strong><div>${platform.country} · ${platform.type}<br>${platform.operator}<br>Coordinates: ${platform.lat.toFixed(4)}°, ${platform.lon.toFixed(4)}° · ${platform.source}</div>`;
+  statusNode.textContent = `launch platform selected · ${platform.name}`;
+  if (focus) {
+    const target = platformMarkers.get(platform.id).getAbsolutePosition();
+    camera.setTarget(target);
+    camera.radius = 6.8;
+  }
+}
+
+function createLaunchPlatformMarkers() {
+  for (const platform of LAUNCH_PLATFORMS) {
+    const marker = BABYLON.MeshBuilder.CreateSphere(`launch platform · ${platform.id}`, { diameter: 0.075, segments: 16 }, scene);
+    marker.parent = platformMarkerRoot;
+    marker.position.copyFrom(latLonToEarthVector(platform.lat, platform.lon, earthRadiusScene * 1.012));
+    marker.isPickable = true;
+    marker.metadata = { platformId: platform.id, selected: false, label: platform.name };
+    const material = new BABYLON.StandardMaterial(`launch platform material · ${platform.id}`, scene);
+    material.diffuseColor = new BABYLON.Color3(0.1, 0.65, 1);
+    material.emissiveColor = new BABYLON.Color3(0.08, 0.55, 0.95);
+    material.disableLighting = true;
+    marker.material = material;
+    platformMarkers.set(platform.id, marker);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'platform-option';
+    button.dataset.platformId = platform.id;
+    button.innerHTML = `<strong>${platform.name}</strong><span>${platform.country} · ${platform.type}</span>`;
+    button.addEventListener('click', () => selectLaunchPlatform(platform));
+    platformListNode.appendChild(button);
+  }
+  scene.onPointerObservable.add(pointerInfo => {
+    if (pointerInfo.type !== BABYLON.PointerEventTypes.POINTERPICK) return;
+    const picked = pointerInfo.pickInfo?.pickedMesh;
+    const platform = LAUNCH_PLATFORMS.find(item => item.id === picked?.metadata?.platformId);
+    if (platform) selectLaunchPlatform(platform);
+  });
+  selectLaunchPlatform(LAUNCH_PLATFORMS[0], false);
+}
+
+createLaunchPlatformMarkers();
+
 let rotation = 0;
 let textureReadyReported = false;
 function updateStatus() {
@@ -142,7 +221,7 @@ function updateStatus() {
 window.__BABYLON_WELCOME_READY = true;
 window.__BABYLON_SCENE = scene;
 window.__BABYLON_ENGINE = engine;
-window.__EARTH_WELCOME = { earth, atmosphere, groundMarker, camera, earthRadiusScene, physicalRadiusM: ATMOSPHERE.earthMeanRadiusM };
+window.__EARTH_WELCOME = { earth, atmosphere, groundMarker, camera, earthRadiusScene, physicalRadiusM: ATMOSPHERE.earthMeanRadiusM, platformMarkers, getSelectedPlatform: () => selectedPlatform };
 
 engine.runRenderLoop(() => {
   const dt = Math.min(engine.getDeltaTime() / 1000, 0.05);
