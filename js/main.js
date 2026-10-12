@@ -110,7 +110,7 @@ function updateStatus() {
   if (celestial.texturesReady() && !textureReadyReported) {
     textureReadyReported = true;
     assetNode.textContent = 'local Earth texture ready';
-    if (!selectedPlatform) statusNode.textContent = 'Earth–Moon system online';
+    if (!launchWizard.getSelectedPlatform()) statusNode.textContent = 'Earth–Moon system online';
   }
 }
 
@@ -137,12 +137,18 @@ window.__EARTH_WELCOME = {
   getSelectedCountry: launchWizard.getSelectedCountry
 };
 
-engine.runRenderLoop(() => {
-  const realDeltaSeconds = Math.min(engine.getDeltaTime() / 1000, 0.05);
+let lastFrameTime = performance.now();
+function renderFrame() {
+  const now = performance.now();
+  const realDeltaSeconds = Math.min((now - lastFrameTime) / 1000, 0.05);
+  lastFrameTime = now;
   const simulationSeconds = clock.tick(realDeltaSeconds);
   celestial.update(simulationSeconds);
   updateStatus();
   scene.render();
-});
+}
+// A timer-backed loop keeps the simulation advancing even in hosts that suspend Babylon's RAF loop.
+renderFrame();
+window.__SIMULATION_TIMER = window.setInterval(renderFrame, 1000 / 60);
 
 window.addEventListener('resize', () => engine.resize());
