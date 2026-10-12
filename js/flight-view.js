@@ -1,12 +1,12 @@
 // Onboard flight camera monitor.
-// Main goal: provide a small telemetry-linked forward view without duplicating the main flight scene.
-// Technique: render a lightweight local Babylon scene with an Earth horizon whose apparent scale follows altitude.
+// Main goal: report the view from a camera mounted just ahead of the crew cabin.
+// Technique: transform the live Earth direction into the rocket's forward/right/up basis, so the horizon only appears where the crew should see it.
 
 export function createFlightView({BABYLON, canvas}) {
   const engine = new BABYLON.Engine(canvas, true, {preserveDrawingBuffer: false, stencil: true}, true);
   const scene = new BABYLON.Scene(engine);
   scene.clearColor = new BABYLON.Color4(.002, .006, .016, 1);
-  const camera = new BABYLON.FreeCamera('onboard flight camera', new BABYLON.Vector3(0, 0, -8), scene);
+  const camera = new BABYLON.FreeCamera('crew cabin nose camera', new BABYLON.Vector3(0, 0, 0), scene);
   camera.setTarget(new BABYLON.Vector3(0, 0, 10));
   camera.fov = .82;
   scene.activeCamera = camera;
@@ -43,11 +43,21 @@ export function createFlightView({BABYLON, canvas}) {
     lastState = state;
     const altitudeFraction = Math.min(1, Math.max(0, (state?.altitudeKm || 0) / 200));
     const angle = state?.orbitAngle || 0;
-    earth.position.x = Math.sin(angle) * 4;
-    earth.position.y = -10 - altitudeFraction * 2.5;
-    earth.position.z = 27 + Math.cos(angle) * 8;
+    const radial = state?.startNormal && state?.tangent
+      ? state.startNormal.scale(Math.cos(angle)).add(state.tangent.scale(Math.sin(angle))).normalize()
+      : new BABYLON.Vector3(0, 1, 0);
+    const forward = state?.flightDirection?.lengthSquared?.() > .000001 ? state.flightDirection.normalizeToNew() : radial;
+    const reference = Math.abs(BABYLON.Vector3.Dot(forward, BABYLON.Vector3.Up())) > .94 ? BABYLON.Vector3.Right() : BABYLON.Vector3.Up();
+    const right = BABYLON.Vector3.Cross(forward, reference).normalize();
+    const up = BABYLON.Vector3.Cross(right, forward).normalize();
+    const earthDirection = radial.scale(-1);
+    const distance = 28 + altitudeFraction * 10;
+    const earthX = BABYLON.Vector3.Dot(earthDirection, right) * distance;
+    const earthY = BABYLON.Vector3.Dot(earthDirection, up) * distance;
+    const earthZ = BABYLON.Vector3.Dot(earthDirection, forward) * distance;
+    earth.position.set(earthX, earthY, earthZ);
     atmosphere.position.copyFrom(earth.position);
-    camera.setTarget(new BABYLON.Vector3(Math.sin(angle) * .35, state?.phase === 'stable-leo' ? .12 : -.1, 10));
+    camera.setTarget(new BABYLON.Vector3(0, 0, 10));
     reticle.rotation.z += .01;
     if (!active) {
       active = true;

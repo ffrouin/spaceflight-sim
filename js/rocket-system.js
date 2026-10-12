@@ -371,6 +371,8 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     }
     const position = state.startNormal.scale(Math.cos(state.orbitAngle)).add(state.tangent.scale(Math.sin(state.orbitAngle))).scale(radius);
     const flightDirection = position.subtract(state.previousPosition);
+    state.flightDirection = flightDirection.lengthSquared() > .000001 ? flightDirection.normalizeToNew() : position.normalizeToNew();
+    state.radialDirection = position.normalizeToNew();
     state.speedKmS = deltaSeconds > 0 ? flightDirection.length() * 6371 / state.earthRadiusScene / deltaSeconds : 0;
     state.previousPosition.copyFrom(position);
     state.radiusKm = radius * 6371 / state.earthRadiusScene;

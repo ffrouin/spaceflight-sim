@@ -280,7 +280,7 @@ function updateFlightTelemetry() {
   telemetryRadiusNode.textContent = `${state.radiusKm.toFixed(1)} km`;
   telemetryTraceNode.textContent = `${rocketSystem.getFlightTrace?.().pointCount || 0} points`;
   flightView.update(state);
-  telemetryNoteNode.textContent = state.phase === 'stable-leo' ? 'Onboard camera active. Earth–Moon view restored; vehicle remains in low Earth orbit.' : 'Onboard camera active. Live trace marks the flown ground-to-LEO path.';
+  telemetryNoteNode.textContent = state.phase === 'stable-leo' ? 'Crew-cabin nose camera active. Earth–Moon view restored; vehicle remains in low Earth orbit.' : 'Crew-cabin nose camera active. View is aligned with the live rocket flight direction.';
 }
 
 function restoreMoonFlightView() {
