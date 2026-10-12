@@ -280,13 +280,13 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     rocketComponentsNode.innerHTML = vehicle.components.map(component => `<div class="component-row" data-component-id="${component.id}"><strong>${component.name}</strong><span>${component.heightM} m × ${component.diameterM} m · ${isMissionCore(component) ? 'retained as primary crew vehicle' : component.detachable ? `separates at ${component.detachAtS}s` : 'retained during flight'}</span></div>`).join('');
   }
 
-  function setRadialPose(position) {
+  function setRocketPose(position, flightDirection = position.normalizeToNew()) {
     rocketRoot.position.copyFrom(position);
-    const normal = position.normalizeToNew();
-    const rotationAxis = BABYLON.Vector3.Cross(BABYLON.Vector3.Up(), normal);
+    const direction = flightDirection.normalizeToNew();
+    const rotationAxis = BABYLON.Vector3.Cross(BABYLON.Vector3.Up(), direction);
     if (rotationAxis.lengthSquared() > .000001) {
       rotationAxis.normalize();
-      rocketRoot.rotationQuaternion = BABYLON.Quaternion.RotationAxis(rotationAxis, Math.acos(BABYLON.Scalar.Clamp(BABYLON.Vector3.Dot(BABYLON.Vector3.Up(), normal), -1, 1)));
+      rocketRoot.rotationQuaternion = BABYLON.Quaternion.RotationAxis(rotationAxis, Math.acos(BABYLON.Scalar.Clamp(BABYLON.Vector3.Dot(BABYLON.Vector3.Up(), direction), -1, 1)));
     }
   }
 
@@ -370,11 +370,12 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
       state.callbacks.onPhaseChange?.(phase);
     }
     const position = state.startNormal.scale(Math.cos(state.orbitAngle)).add(state.tangent.scale(Math.sin(state.orbitAngle))).scale(radius);
-    state.speedKmS = deltaSeconds > 0 ? position.subtract(state.previousPosition).length() * 6371 / state.earthRadiusScene / deltaSeconds : 0;
+    const flightDirection = position.subtract(state.previousPosition);
+    state.speedKmS = deltaSeconds > 0 ? flightDirection.length() * 6371 / state.earthRadiusScene / deltaSeconds : 0;
     state.previousPosition.copyFrom(position);
     state.radiusKm = radius * 6371 / state.earthRadiusScene;
     state.altitudeKm = state.radiusKm - 6371;
-    setRadialPose(position);
+    setRocketPose(position, flightDirection.lengthSquared() > .000001 ? flightDirection : position);
     if (!flightTracePoints.length || BABYLON.Vector3.Distance(flightTracePoints[flightTracePoints.length - 1], position) > 2) {
       flightTracePoints.push(position.clone());
       flightTrace = BABYLON.MeshBuilder.CreateLines('live launch flight trace', {points: flightTracePoints, colors: flightTracePoints.map(() => new BABYLON.Color4(.25, .85, 1, .9)), instance: flightTrace}, scene);
