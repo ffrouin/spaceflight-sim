@@ -153,26 +153,61 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     return (order[a.kind] || 4) - (order[b.kind] || 4);
   }) || [];
   const physicalHeight = componentOrder.reduce((sum, item) => sum + (item.heightM || 0), 0);
-  const visualScale = Math.min(1, 92 / Math.max(physicalHeight, 1));
+  const welcomeEarthRadiusScene = 999;
+  const visualBoost = 5_000;
+  const visualScale = (welcomeEarthRadiusScene * 2 / (2 * 6_371_000)) * visualBoost;
+  const rocketRoot = new BABYLON.TransformNode(`launch rocket assembly · ${vehicle?.id || 'selected vehicle'}`, scene);
+  rocketRoot.position.set(0, 20, 0);
+  const rocketColors = {
+    'crew-capsule': new BABYLON.Color3(.62, .72, .82),
+    'orbital-module': new BABYLON.Color3(.36, .52, .7),
+    'upper-stage': new BABYLON.Color3(.72, .75, .78),
+    'core-stage': new BABYLON.Color3(.82, .83, .78),
+    'booster': new BABYLON.Color3(.42, .46, .5),
+    'escape-tower': new BABYLON.Color3(.9, .42, .22),
+    'escape-system': new BABYLON.Color3(.9, .42, .22),
+    interstage: new BABYLON.Color3(.25, .3, .36)
+  };
+  const rocketMaterialFor = (component) => {
+    const result = new BABYLON.StandardMaterial(`launch rocket material · ${component.id}`, scene);
+    result.diffuseColor = rocketColors[component.kind] || new BABYLON.Color3(.55, .58, .62);
+    result.metallic = component.kind === 'crew-capsule' ? .35 : .18;
+    result.roughness = .62;
+    return result;
+  };
+  const createRocketPart = component => {
+    const diameter = Math.max(.012, component.diameterM * visualScale);
+    const height = Math.max(.018, component.heightM * visualScale);
+    let part;
+    if (component.kind === 'crew-capsule' || component.kind === 'orbital-module') {
+      part = BABYLON.MeshBuilder.CreateCylinder(`selected rocket ${component.id}`, {diameterTop: diameter * .68, diameterBottom: diameter, height, tessellation: 32}, scene);
+    } else if (component.kind === 'escape-tower' || component.kind === 'escape-system') {
+      part = BABYLON.MeshBuilder.CreateCylinder(`selected rocket ${component.id}`, {diameter: diameter * .34, height, tessellation: 20}, scene);
+    } else {
+      part = BABYLON.MeshBuilder.CreateCylinder(`selected rocket ${component.id}`, {diameter, height, tessellation: 32}, scene);
+    }
+    part.material = rocketMaterialFor(component);
+    part.metadata = {...component, physicalHeightM: component.heightM, physicalDiameterM: component.diameterM, visualBoost, sceneRole: 'selected-launch-vehicle'};
+    part.isPickable = false;
+    part.parent = rocketRoot;
+    return {part, height};
+  };
   const rocketParts = [];
-  let rocketCursor = 20;
-  const componentMaterial = kind => kind === 'escape-tower' || kind === 'escape-system' ? orangeMaterial : kind === 'core-stage' ? orangeMaterial : kind === 'interstage' ? blackMaterial : rocketMaterial;
+  let rocketCursor = 0;
   for (const component of componentOrder) {
-    const height = Math.max(.5, (component.heightM || 1) * visualScale);
-    const diameter = Math.max(1.2, (component.diameterM || 1) * visualScale);
-    const part = cylinder(`selected rocket ${component.id}`, diameter, height, new BABYLON.Vector3(0, rocketCursor + height / 2, 0), componentMaterial(component.kind));
-    part.metadata = {...component, sceneRole: 'selected-launch-vehicle'};
-    rocketParts.push(part);
+    const {part, height} = createRocketPart(component);
+    part.position.y = rocketCursor + height / 2;
     rocketCursor += height;
+    rocketParts.push(part);
   }
   const boosters = vehicle?.components?.filter(item => item.kind === 'booster') || [];
   boosters.forEach((component, index) => {
-    const height = Math.max(.5, (component.heightM || 1) * visualScale);
-    const diameter = Math.max(1.2, (component.diameterM || 1) * visualScale);
-    const x = (index - (boosters.length - 1) / 2) * Math.max(7, diameter * 1.35);
-    const booster = cylinder(`selected rocket booster ${component.id}`, diameter, height, new BABYLON.Vector3(x, 20 + height / 2, 0), orangeMaterial);
-    booster.metadata = {...component, sceneRole: 'selected-launch-vehicle'};
-    rocketParts.push(booster);
+    const {part, height} = createRocketPart(component);
+    const diameter = Math.max(.012, component.diameterM * visualScale);
+    const angle = index / Math.max(1, boosters.length) * Math.PI * 2;
+    const ring = Math.max(.04, component.diameterM * visualScale * .82);
+    part.position.set(Math.cos(angle) * ring, height / 2, Math.sin(angle) * ring);
+    rocketParts.push(part);
   });
 
   const rocketHeight = Math.max(physicalHeight * visualScale, 1);
@@ -222,6 +257,7 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     camera,
     platform,
     vehicle,
+    rocketRoot,
     rocketParts,
     ground,
     groundExtentMultiplier,
