@@ -182,10 +182,23 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
   }
   box('mobile launch tower top', {width: 18, depth: 18, height: 3}, new BABYLON.Vector3(towerX, 130, 0), steelMaterial);
 
+  const accessArmRoots = [];
   for (let y = 35; y <= 105; y += 18) {
-    const arm = box('crew access arm', {width: 40, depth: 3, height: 2.2}, new BABYLON.Vector3(towerX - 20, y, 0), safetyMaterial);
+    const armRoot = new BABYLON.TransformNode(`crew access arm root ${y}`, scene);
+    armRoot.position.set(towerX, y, 0);
+    const arm = box('crew access arm', {width: 32, depth: 3, height: 2.2}, new BABYLON.Vector3(-16, 0, 0), safetyMaterial);
+    arm.parent = armRoot;
     arm.rotation.z = .08;
-    box('crew access platform', {width: 8, depth: 12, height: 2}, new BABYLON.Vector3(towerX - 41, y - 1.5, 0), steelMaterial);
+    const armEndRoot = new BABYLON.TransformNode(`crew access arm extremity root ${y}`, scene);
+    armEndRoot.parent = armRoot;
+    armEndRoot.position.set(-32, 0, 0);
+    const platform = box('crew access platform', {width: 8, depth: 12, height: 2}, new BABYLON.Vector3(-4, -1.5, 0), steelMaterial);
+    platform.parent = armEndRoot;
+    const endRail = box('crew access arm extremity rail', {width: 8, depth: .45, height: 2.2}, new BABYLON.Vector3(-4, 1.3, -3.1), safetyMaterial);
+    endRail.parent = armEndRoot;
+    armRoot.metadata = {launchpadPart: 'crew-access-arm', hingeY: y, targetFallDegrees: 45};
+    armEndRoot.metadata = {launchpadPart: 'crew-access-arm-extremity', retractsBeforeFall: true};
+    accessArmRoots.push({root: armRoot, extremity: armEndRoot});
   }
   for (let i = -3; i <= 3; i += 1) {
     box('umbilical service pipe', {width: 2, depth: 2, height: 92}, new BABYLON.Vector3(towerX + i * 2.5, 68, -10), darkSteelMaterial);
@@ -255,8 +268,26 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     rocketParts.push(part);
     rocketPartById.set(component.id, part);
   });
-
   const rocketHeight = Math.max(physicalHeight * visualScale, 1);
+  const engineBurnRoot = new BABYLON.TransformNode('rocket engine burn root', scene);
+  engineBurnRoot.parent = rocketRoot;
+  const engineBurnMaterial = material('rocket adjustable engine burn', new BABYLON.Color3(1, .18, .025), {transparent: true, emissive: new BABYLON.Color3(1, .08, .01)});
+  engineBurnMaterial.alpha = .88;
+  engineBurnMaterial.backFaceCulling = false;
+  const engineBurnMeshes = [];
+  const burnCount = Math.max(1, Math.min(5, boosters.length + 1));
+  for (let index = 0; index < burnCount; index += 1) {
+    const angle = index / Math.max(1, burnCount) * Math.PI * 2;
+    const radius = index === 0 ? 0 : Math.max(.05, (vehicle?.diameterM || 3) * visualScale * .28);
+    const flame = BABYLON.MeshBuilder.CreateCylinder(`rocket engine burn ${index + 1}`, {diameterTop: Math.max(.02, (vehicle?.diameterM || 3) * visualScale * .12), diameterBottom: Math.max(.04, (vehicle?.diameterM || 3) * visualScale * .3), height: Math.max(.4, rocketHeight * .24), tessellation: 20}, scene);
+    flame.parent = engineBurnRoot;
+    flame.position.set(Math.cos(angle) * radius, -Math.max(.2, rocketHeight * .12), Math.sin(angle) * radius);
+    flame.material = engineBurnMaterial;
+    flame.isPickable = false;
+    flame.setEnabled(false);
+    engineBurnMeshes.push(flame);
+  }
+  const burnState = {strength: 0, active: false, throttle: 1};
   const atmosphereTopM = 100_000;
   const lowerAtmosphereM = 12_000;
   const atmosphereRadiusScene = atmosphereTopM * visualScale;
@@ -322,6 +353,11 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     accelerationG: 0,
     fuelBurnKgS: 0,
     throttle: 1,
+    burnStrength: 0,
+    burnActive: false,
+    extremityRetractProgress: 0,
+    extremityRetracted: false,
+    accessArmAngleDeg: 4.6,
     engines: flightModel.engines,
     started: false,
     aborted: false
@@ -371,6 +407,36 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     launchState.phase = phase;
     launchPhaseCallbacks.forEach(callback => callback(phase, {...launchState}));
   }
+  function updateLaunchpadMechanisms() {
+    const extremityProgress = launchState.started ? BABYLON.Scalar.Clamp(launchState.elapsed / 3, 0, 1) : 0;
+    const armProgress = launchState.started ? BABYLON.Scalar.Clamp((launchState.elapsed - 3) / 5, 0, 1) : 0;
+    const smoothExtremity = extremityProgress * extremityProgress * (3 - 2 * extremityProgress);
+    const smoothArm = armProgress * armProgress * (3 - 2 * armProgress);
+    launchState.extremityRetractProgress = smoothExtremity;
+    launchState.extremityRetracted = smoothExtremity >= 1;
+    launchState.accessArmAngleDeg = Math.abs((.08 + (Math.PI / 4 - .08) * smoothArm) * 180 / Math.PI);
+    for (const {root, extremity} of accessArmRoots) {
+      extremity.position.x = -32 + 14 * smoothExtremity;
+      root.rotation.z = .08 + (Math.PI / 4 - .08) * smoothArm;
+    }
+  }
+  function updateEngineBurnVisual() {
+    const referenceFlow = Math.max(1, flightModel.thrustSeaLevelN / (flightModel.specificImpulseSeaLevelS * gravityConstant));
+    const strength = launchState.started && !launchState.aborted && launchState.fuelKg > 0 ? BABYLON.Scalar.Clamp((launchState.fuelBurnKgS / referenceFlow) * throttle, 0, 1) : 0;
+    burnState.strength = strength;
+    burnState.active = strength > .001;
+    burnState.throttle = throttle;
+    launchState.burnStrength = strength;
+    launchState.burnActive = burnState.active;
+    engineBurnMaterial.alpha = .12 + strength * .76;
+    engineBurnMaterial.emissiveColor = new BABYLON.Color3(1, .04 + strength * .35, .005);
+    engineBurnMeshes.forEach((flame, index) => {
+      flame.setEnabled(burnState.active);
+      flame.scaling.y = .2 + strength * (index === 0 ? 2.2 : 1.7);
+      flame.scaling.x = .45 + strength * .55;
+      flame.scaling.z = .45 + strength * .55;
+    });
+  }
   function updateLaunchPresentation() {
     const altitudeKm = launchState.altitudeKm;
     if (launchState.aborted) {
@@ -389,6 +455,8 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     launchState.throttle = throttle;
     updateSkyGradient(altitudeKm);
     launchState.tracePointCount = launchState.started ? Math.max(1, Math.floor(launchState.elapsed * 10)) : 0;
+    updateLaunchpadMechanisms();
+    updateEngineBurnVisual();
     rocketRoot.position.y = launchBaseY + altitudeKm * 1000 * visualScale;
     camera.setTarget(new BABYLON.Vector3(rocketRoot.position.x, rocketRoot.position.y + rocketHeight * .52, rocketRoot.position.z));
     camera.radius = Math.max(150, rocketHeight * 3);
