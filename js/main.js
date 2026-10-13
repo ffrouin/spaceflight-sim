@@ -59,6 +59,7 @@ const timeControlHandleNode = document.getElementById('timeControlHandle');
 const timeRateLabelNode = document.getElementById('timeRateLabel');
 const timeControlStatusNode = document.getElementById('timeControlStatus');
 const timeButtons = [...document.querySelectorAll('[data-time-rate]')];
+const sceneTransitionNode = document.getElementById('sceneTransition');
 
 // Expose the physical launch reference for the later wizard stages and review tooling.
 window.__ATMOSPHERE_MODEL = { constants: ATMOSPHERE, atAltitude: isaAtmosphereAt };
@@ -425,12 +426,19 @@ function restoreMoonFlightView() {
   statusNode.textContent = 'stable low Earth orbit · rocket focus retained · Earth–Moon view restored';
 }
 
-launchButtonNode.addEventListener('click', () => {
-  if (!rocketSystem.getSelectedVehicle?.()) return;
-  setLaunchTimeRate(1);
+function disposeWelcomeLaunchPreparation() {
   launchWizard.setMarkersVisible(false);
-  prepareLaunchEnvironment();
+  platformMarkerRoot.dispose(false, true);
+  rocketSystem.disposeLaunchPreparation?.();
+  launchPanelNode.classList.add('hidden');
   rocketDockNode.classList.add('hidden');
+  planetLabelNode.classList.add('hidden');
+  window.__LAUNCH_SCENE_MEMORY_CLEANED = true;
+}
+
+function startLaunchSequence() {
+  setLaunchTimeRate(1);
+  prepareLaunchEnvironment();
   flightTelemetryNode.classList.remove('hidden');
   timeControlPanelNode.classList.remove('hidden');
   flightView.resize();
@@ -450,6 +458,26 @@ launchButtonNode.addEventListener('click', () => {
     rocketSystem.focusRocket();
     updateFlightTelemetry();
   } else statusNode.textContent = 'select a crewed rocket before launch';
+}
+
+let launchTransitioning = false;
+launchButtonNode.addEventListener('click', () => {
+  if (launchTransitioning || !rocketSystem.getSelectedVehicle?.()) return;
+  launchTransitioning = true;
+  launchButtonNode.disabled = true;
+  statusNode.textContent = 'preparing launch scene · releasing welcome resources';
+  sceneTransitionNode.classList.add('active');
+  window.__LAUNCH_SCENE_TRANSITION = 'fading-out';
+  window.setTimeout(() => {
+    disposeWelcomeLaunchPreparation();
+    startLaunchSequence();
+    sceneTransitionNode.classList.add('revealing');
+    window.__LAUNCH_SCENE_TRANSITION = 'launch-scene-active';
+    window.setTimeout(() => {
+      sceneTransitionNode.classList.remove('active', 'revealing');
+      launchTransitioning = false;
+    }, 460);
+  }, 460);
 });
 
 updateLaunchAtmosphere(launchWizard.getSelectedPlatform());

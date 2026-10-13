@@ -25,6 +25,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
   const previewDetachedStates = new Map();
   const previewGravity = 2.5;
   let previewClockSeconds = 0;
+  let previewTimer = null;
   if (previewScene) {
     previewScene.clearColor = new BABYLON.Color4(.005, .012, .028, 1);
     previewCamera.attachControl(previewCanvas, true);
@@ -36,7 +37,7 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     const rim = new BABYLON.DirectionalLight('tablet preview rim', new BABYLON.Vector3(-.5, -.8, -.4), previewScene);
     rim.intensity = 1.2;
   }
-  if (previewScene) window.setInterval(() => stepPreview(1 / 30), 33);
+  if (previewScene) previewTimer = window.setInterval(() => stepPreview(1 / 30), 33);
   let selectedVehicle = null;
   let rocketRoot = null;
   let componentNodes = new Map();
@@ -499,5 +500,17 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     [rocketRoot, orbitGuide, flightTrace].forEach(node => node?.setEnabled(!hidden));
   }
 
-  return {buildRocket, selectVehicleById, focusGround, focusRocket, updateCrewCamera, setCrewCameraOcclusionHidden, setFlightSeconds, launchToOrbit, stepLaunch, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getFlightTrace: () => ({mesh: flightTrace, pointCount: flightTracePoints.length, points: flightTracePoints.map(point => point.asArray())}), getLaunchState: () => launchState, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
+  function disposeLaunchPreparation() {
+    if (previewTimer != null) {
+      window.clearInterval(previewTimer);
+      previewTimer = null;
+    }
+    previewEngine?.stopRenderLoop();
+    previewScene?.dispose();
+    previewEngine?.dispose();
+    previewDetachedStates.clear();
+    previewComponentNodes.clear();
+  }
+
+  return {buildRocket, selectVehicleById, focusGround, focusRocket, disposeLaunchPreparation, updateCrewCamera, setCrewCameraOcclusionHidden, setFlightSeconds, launchToOrbit, stepLaunch, resizePreview, getPreviewState: () => ({gravitySceneUnitsPerSecondSquared: previewGravity, clockSeconds: previewClockSeconds, detachedComponentIds: [...previewDetachedStates.keys()]}), getFlightTrace: () => ({mesh: flightTrace, pointCount: flightTracePoints.length, points: flightTracePoints.map(point => point.asArray())}), getLaunchState: () => launchState, getSelectedVehicle: () => selectedVehicle, getRocketRoot: () => rocketRoot, getOrbitGuide: () => orbitGuide, getFlightSeconds: () => flightSeconds, visualBoost};
 }
