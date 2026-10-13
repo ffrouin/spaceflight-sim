@@ -43,6 +43,45 @@ export const LAUNCH_VEHICLES = Object.freeze([
     ]
   },
   {
+    id: 'saturn-v-apollo-11',
+    name: 'Saturn V · Apollo 11',
+    country: 'United States',
+    launcher: 'Saturn V SA-506 + Apollo 11 spacecraft',
+    crewed: true,
+    operationalCrewRating: true,
+    humanFlightNote: 'Historical flight configuration used for Apollo 11, the first crewed lunar landing mission.',
+    heightM: 110.6,
+    diameterM: 10.1,
+    source: 'NASA Apollo 11 Press Kit',
+    flightModel: {
+      initialMassKg: 2900000,
+      dryMassKg: 160000,
+      propellantMassKg: 2740000,
+      thrustSeaLevelN: 34000000,
+      thrustVacuumN: 39000000,
+      specificImpulseSeaLevelS: 263,
+      specificImpulseVacuumS: 421,
+      jettisonableMassKg: 180000,
+      boosterSeparationS: 165,
+      upperStageStartS: 540,
+      coreStageThrustSeaLevelN: 5000000,
+      upperStageThrustVacuumN: 1000000,
+      upperStageSpecificImpulseS: 421,
+      engines: '5× F-1 first-stage engines; 5× J-2 S-II engines; 1× J-2 S-IVB engine'
+    },
+    components: [
+      {id:'saturn-v-s-ic', name:'S-IC first stage · five F-1 engines', kind:'expendable-stage', stackOrder:1, heightM:42.5, diameterM:10.1, detachable:true, detachAtS:165},
+      {id:'saturn-v-s-ii', name:'S-II second stage · five J-2 engines', kind:'expendable-stage', stackOrder:2, heightM:24.9, diameterM:10.1, detachable:true, detachAtS:540},
+      {id:'saturn-v-s-ivb', name:'S-IVB third stage · one J-2 engine', kind:'expendable-stage', stackOrder:3, heightM:17.8, diameterM:6.6, detachable:true, detachAtS:720},
+      {id:'saturn-v-instrument-unit', name:'Instrument Unit · launch guidance', kind:'interstage', stackOrder:4, heightM:.9, diameterM:6.6, detachable:true, detachAtS:720},
+      {id:'saturn-v-sla', name:'Spacecraft-Lunar Module Adapter', kind:'interstage', stackOrder:5, heightM:4.0, diameterM:6.6, detachable:true, detachAtS:720},
+      {id:'apollo-11-lunar-module', name:'Apollo Lunar Module', kind:'orbital-module', stackOrder:6, heightM:4.0, diameterM:4.2, detachable:false, detachAtS:null},
+      {id:'apollo-11-service-module', name:'Apollo Service Module', kind:'orbital-module', stackOrder:7, heightM:5.8, diameterM:3.9, detachable:false, detachAtS:null},
+      {id:'apollo-11-command-module', name:'Apollo Command Module', kind:'crew-capsule', stackOrder:8, heightM:3.2, diameterM:3.9, detachable:false, detachAtS:null},
+      {id:'apollo-11-launch-escape', name:'Apollo launch escape system', kind:'escape-tower', stackOrder:9, heightM:7.5, diameterM:1.2, detachable:true, detachAtS:195}
+    ]
+  },
+  {
     id: 'starship-crewed',
     name: 'Starship · crewed configuration',
     country: 'United States',

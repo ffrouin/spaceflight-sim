@@ -7,6 +7,7 @@ const COLORS = Object.freeze({
   'crew-capsule': new BABYLON.Color3(.62, .72, .82),
   'orbital-module': new BABYLON.Color3(.36, .52, .7),
   'upper-stage': new BABYLON.Color3(.72, .75, .78),
+  'expendable-stage': new BABYLON.Color3(.74, .76, .72),
   'core-stage': new BABYLON.Color3(.82, .83, .78),
   'booster': new BABYLON.Color3(.42, .46, .5),
   'escape-tower': new BABYLON.Color3(.9, .42, .22),
@@ -101,8 +102,8 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
   }
 
   function orderedComponents(vehicle) {
-    const order = {'core-stage': 1, 'upper-stage': 2, 'interstage': 3, 'crew-capsule': 4, 'orbital-module': 5, 'escape-system': 6, 'escape-tower': 7};
-    return vehicle.components.filter(item => item.kind !== 'booster').sort((a, b) => (order[a.kind] || 4) - (order[b.kind] || 4));
+    const order = {'expendable-stage': 1, 'core-stage': 1, 'upper-stage': 2, 'interstage': 3, 'crew-capsule': 4, 'orbital-module': 5, 'escape-system': 6, 'escape-tower': 7};
+    return vehicle.components.filter(item => item.kind !== 'booster').sort((a, b) => (a.stackOrder ?? order[a.kind] ?? 4) - (b.stackOrder ?? order[b.kind] ?? 4));
   }
 
   function clearPreview() {
@@ -208,8 +209,8 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     const scale = metersToScene(window.__CELESTIAL_SYSTEM.earthRadiusScene, 1);
     const boosters = vehicle.components.filter(item => item.kind === 'booster');
     const stack = vehicle.components.filter(item => item.kind !== 'booster').sort((a, b) => {
-      const order = {'core-stage': 1, 'upper-stage': 2, 'interstage': 3, 'crew-capsule': 4, 'orbital-module': 5, 'escape-system': 6, 'escape-tower': 7};
-      return (order[a.kind] || 4) - (order[b.kind] || 4);
+      const order = {'expendable-stage': 1, 'core-stage': 1, 'upper-stage': 2, 'interstage': 3, 'crew-capsule': 4, 'orbital-module': 5, 'escape-system': 6, 'escape-tower': 7};
+      return (a.stackOrder ?? order[a.kind] ?? 4) - (b.stackOrder ?? order[b.kind] ?? 4);
     });
     let cursor = 0;
     for (const component of stack) {
@@ -297,8 +298,8 @@ export function createRocketSystem({BABYLON, scene, rocketListNode, rocketInfoNo
     if (!camera || !rocketRoot || !selectedVehicle) return false;
     const scale = metersToScene(window.__CELESTIAL_SYSTEM.earthRadiusScene, 1);
     const stack = selectedVehicle.components.filter(item => item.kind !== 'booster').sort((a, b) => {
-      const order = {'core-stage': 1, 'upper-stage': 2, 'interstage': 3, 'crew-capsule': 4, 'orbital-module': 5, 'escape-system': 6, 'escape-tower': 7};
-      return (order[a.kind] || 4) - (order[b.kind] || 4);
+      const order = {'expendable-stage': 1, 'core-stage': 1, 'upper-stage': 2, 'interstage': 3, 'crew-capsule': 4, 'orbital-module': 5, 'escape-system': 6, 'escape-tower': 7};
+      return (a.stackOrder ?? order[a.kind] ?? 4) - (b.stackOrder ?? order[b.kind] ?? 4);
     });
     const cabinIndex = stack.findIndex(component => component.kind === 'crew-capsule');
     if (cabinIndex < 0) return false;

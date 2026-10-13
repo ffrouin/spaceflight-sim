@@ -205,8 +205,8 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
   }
 
   const componentOrder = vehicle?.components?.filter(item => item.kind !== 'booster').sort((a, b) => {
-    const order = {'core-stage': 1, 'upper-stage': 2, interstage: 3, 'crew-capsule': 4, 'orbital-module': 5, 'escape-system': 6, 'escape-tower': 7};
-    return (order[a.kind] || 4) - (order[b.kind] || 4);
+    const order = {'expendable-stage': 1, 'core-stage': 1, 'upper-stage': 2, interstage: 3, 'crew-capsule': 4, 'orbital-module': 5, 'escape-system': 6, 'escape-tower': 7};
+    return (a.stackOrder ?? order[a.kind] ?? 4) - (b.stackOrder ?? order[b.kind] ?? 4);
   }) || [];
   const physicalHeight = componentOrder.reduce((sum, item) => sum + (item.heightM || 0), 0);
   const welcomeEarthRadiusScene = 999;
@@ -218,6 +218,7 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     'crew-capsule': new BABYLON.Color3(.62, .72, .82),
     'orbital-module': new BABYLON.Color3(.36, .52, .7),
     'upper-stage': new BABYLON.Color3(.72, .75, .78),
+    'expendable-stage': new BABYLON.Color3(.74, .76, .72),
     'core-stage': new BABYLON.Color3(.82, .83, .78),
     'booster': new BABYLON.Color3(.42, .46, .5),
     'escape-tower': new BABYLON.Color3(.9, .42, .22),
