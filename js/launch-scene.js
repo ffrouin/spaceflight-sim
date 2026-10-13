@@ -335,13 +335,26 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     approximate: true
   };
   const gravityConstant = 9.80665;
+  const earthRadiusM = 6_371_000;
+  const earthRotationRateRadS = 7.2921159e-5;
+  const siteLatitudeDeg = Number(platform?.lat) || 0;
+  const siteLongitudeDeg = Number(platform?.lon) || 0;
+  const siteElevationM = Math.max(0, Number(platform?.elevationM) || 0);
+  const siteRotationalVelocityMps = earthRotationRateRadS * (earthRadiusM + siteElevationM) * Math.cos(siteLatitudeDeg * Math.PI / 180);
+  const launchSiteAdvantageKmS = siteRotationalVelocityMps / 1000;
   let throttle = 1;
   const launchState = {
     phase: 'prelaunch',
     elapsed: 0,
     altitudeKm: 0,
-    speedKmS: 0,
+    verticalSpeedKmS: 0,
+    horizontalSpeedKmS: launchSiteAdvantageKmS,
+    speedKmS: launchSiteAdvantageKmS,
     radiusKm: 6371,
+    siteLatitudeDeg,
+    siteLongitudeDeg,
+    siteElevationM,
+    launchSiteAdvantageKmS,
     tracePointCount: 0,
     separationCount: 0,
     separatedComponentIds: [],
@@ -487,13 +500,16 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     launchState.accelerationMps2 = netAcceleration;
     launchState.accelerationG = netAcceleration / gravityConstant;
     if (altitudeM < 100000) {
-      launchState.speedKmS = Math.max(0, launchState.speedKmS + netAcceleration * deltaSeconds / 1000);
-      launchState.altitudeKm += launchState.speedKmS * deltaSeconds;
+      launchState.verticalSpeedKmS = Math.max(0, launchState.verticalSpeedKmS + netAcceleration * deltaSeconds / 1000);
+      launchState.horizontalSpeedKmS = Math.max(0, launchState.horizontalSpeedKmS - dragAcceleration * deltaSeconds / 1000);
+      launchState.speedKmS = Math.sqrt(launchState.verticalSpeedKmS ** 2 + launchState.horizontalSpeedKmS ** 2);
+      launchState.altitudeKm += launchState.verticalSpeedKmS * deltaSeconds;
     } else {
       const horizontalAcceleration = Math.max(0, thrustAcceleration) * .92;
-      launchState.speedKmS = Math.min(7.79, launchState.speedKmS + horizontalAcceleration * deltaSeconds / 1000);
-      const verticalVelocityKmS = Math.max(0, launchState.speedKmS * .08 - (altitudeM - 100000) / 100000 * .4);
-      launchState.altitudeKm += verticalVelocityKmS * deltaSeconds;
+      launchState.verticalSpeedKmS = Math.max(0, launchState.verticalSpeedKmS + netAcceleration * .15 * deltaSeconds / 1000 - launchState.verticalSpeedKmS * .1 * deltaSeconds);
+      launchState.horizontalSpeedKmS = Math.min(7.79, launchState.horizontalSpeedKmS + horizontalAcceleration * deltaSeconds / 1000);
+      launchState.speedKmS = Math.sqrt(launchState.verticalSpeedKmS ** 2 + launchState.horizontalSpeedKmS ** 2);
+      launchState.altitudeKm += launchState.verticalSpeedKmS * deltaSeconds;
     }
     if (launchState.altitudeKm >= 200 && launchState.speedKmS >= 7.79) {
       launchState.altitudeKm = 200;
@@ -506,8 +522,10 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     launchState.started = true;
     launchState.aborted = false;
     launchState.elapsed = 0;
-    launchState.altitudeKm = 0;
-    launchState.speedKmS = 0;
+    launchState.altitudeKm = siteElevationM / 1000;
+    launchState.verticalSpeedKmS = 0;
+    launchState.horizontalSpeedKmS = launchSiteAdvantageKmS;
+    launchState.speedKmS = launchSiteAdvantageKmS;
     launchState.fuelKg = flightModel.propellantMassKg;
     launchState.massKg = flightModel.initialMassKg;
     launchState.jettisonedMassKg = 0;

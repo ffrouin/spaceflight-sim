@@ -45,6 +45,7 @@ const telemetrySpeedNode = document.getElementById('telemetrySpeed');
 const telemetryRadiusNode = document.getElementById('telemetryRadius');
 const telemetryTraceNode = document.getElementById('telemetryTrace');
 const telemetryFuelNode = document.getElementById('telemetryFuel');
+const telemetrySiteAssistNode = document.getElementById('telemetrySiteAssist');
 const telemetryAccelerationNode = document.getElementById('telemetryAcceleration');
 const telemetryBurnNode = document.getElementById('telemetryBurn');
 const launchThrottleNode = document.getElementById('launchThrottle');
@@ -405,6 +406,7 @@ function updateFlightTelemetry() {
     telemetryRadiusNode.textContent = `${state.radiusKm.toFixed(1)} km`;
     telemetryTraceNode.textContent = `${state.tracePointCount} points`;
     telemetryFuelNode.textContent = `${Math.max(0, state.fuelKg).toFixed(0)} kg`;
+    telemetrySiteAssistNode.textContent = `${state.launchSiteAdvantageKmS.toFixed(3)} km/s`;
     telemetryAccelerationNode.textContent = `${state.accelerationG.toFixed(2)} g`;
     telemetryBurnNode.textContent = state.burnActive ? `${Math.round(state.burnStrength * 100)}% · ON` : 'OFF';
     launchThrottleNode.value = String(Math.round(state.throttle * 100));
