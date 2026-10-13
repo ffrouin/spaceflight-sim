@@ -236,21 +236,24 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     return {part, height};
   };
   const rocketParts = [];
+  const rocketPartById = new Map();
+  const isMissionCore = component => component.kind === 'crew-capsule' || component.kind === 'orbital-module' || component.kind === 'core-stage' || component.kind === 'upper-stage' || component.id.includes('crew-deck');
   let rocketCursor = 0;
   for (const component of componentOrder) {
     const {part, height} = createRocketPart(component);
     part.position.y = rocketCursor + height / 2;
     rocketCursor += height;
     rocketParts.push(part);
+    rocketPartById.set(component.id, part);
   }
   const boosters = vehicle?.components?.filter(item => item.kind === 'booster') || [];
   boosters.forEach((component, index) => {
     const {part, height} = createRocketPart(component);
-    const diameter = Math.max(.012, component.diameterM * visualScale);
     const angle = index / Math.max(1, boosters.length) * Math.PI * 2;
     const ring = Math.max(.04, component.diameterM * visualScale * .82);
     part.position.set(Math.cos(angle) * ring, height / 2, Math.sin(angle) * ring);
     rocketParts.push(part);
+    rocketPartById.set(component.id, part);
   });
 
   const rocketHeight = Math.max(physicalHeight * visualScale, 1);
@@ -289,6 +292,19 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
   camera.maxZ = atmosphereRadiusScene * 1.4;
   const minimumCameraGroundClearance = 1.5;
   const launchBaseY = rocketRoot.position.y;
+  const flightModel = vehicle?.flightModel || {
+    initialMassKg: 100000,
+    dryMassKg: 20000,
+    propellantMassKg: 80000,
+    thrustSeaLevelN: 1500000,
+    thrustVacuumN: 1650000,
+    specificImpulseSeaLevelS: 300,
+    specificImpulseVacuumS: 340,
+    engines: 'generic fallback engine model',
+    approximate: true
+  };
+  const gravityConstant = 9.80665;
+  let throttle = 1;
   const launchState = {
     phase: 'prelaunch',
     elapsed: 0,
@@ -296,70 +312,174 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     speedKmS: 0,
     radiusKm: 6371,
     tracePointCount: 0,
+    separationCount: 0,
+    separatedComponentIds: [],
+    fuelKg: flightModel.propellantMassKg,
+    fuelFraction: 1,
+    massKg: flightModel.initialMassKg,
+    jettisonedMassKg: 0,
+    accelerationMps2: 0,
+    accelerationG: 0,
+    fuelBurnKgS: 0,
+    throttle: 1,
+    engines: flightModel.engines,
     started: false,
     aborted: false
   };
+  const separatedStates = new Map();
+  function separateComponent(component) {
+    const part = rocketPartById.get(component.id);
+    if (!part || separatedStates.has(component.id)) return;
+    part.computeWorldMatrix(true);
+    const worldPosition = part.getAbsolutePosition().clone();
+    part.parent = null;
+    part.position.copyFrom(worldPosition);
+    const outward = new BABYLON.Vector3(worldPosition.x, 0, worldPosition.z);
+    if (outward.lengthSquared() < .000001) outward.copyFrom(BABYLON.Axis.X);
+    outward.normalize();
+    const detachableCount = (vehicle?.components || []).filter(item => item.detachable && !isMissionCore(item)).length;
+    const jettisonMassKg = detachableCount > 0 ? (flightModel.jettisonableMassKg || 0) / detachableCount : 0;
+    launchState.jettisonedMassKg += jettisonMassKg;
+    separatedStates.set(component.id, {
+      component,
+      part,
+      position: worldPosition,
+      jettisonMassKg,
+      velocity: outward.scale(.12).add(new BABYLON.Vector3(0, -.035, 0))
+    });
+    launchState.separationCount += 1;
+    launchState.separatedComponentIds = [...separatedStates.keys()];
+  }
+  function applyLaunchSeparations() {
+    for (const component of vehicle?.components || []) {
+      if (!component.detachable || component.detachAtS == null || isMissionCore(component)) continue;
+      if (launchState.elapsed >= component.detachAtS) separateComponent(component);
+    }
+  }
+  function stepSeparatedComponents(deltaSeconds) {
+    for (const state of separatedStates.values()) {
+      state.velocity.y -= .004 * deltaSeconds;
+      state.position.addInPlace(state.velocity.scale(deltaSeconds));
+      state.part.position.copyFrom(state.position);
+      state.part.rotation.x += deltaSeconds * .12;
+      state.part.rotation.z += deltaSeconds * .08;
+    }
+  }
   const launchPhaseCallbacks = new Set();
   function setLaunchPhase(phase) {
     if (launchState.phase === phase) return;
     launchState.phase = phase;
     launchPhaseCallbacks.forEach(callback => callback(phase, {...launchState}));
   }
-  function applyLaunchTrajectory() {
-    const t = launchState.elapsed;
-    let altitudeKm = 0;
-    let speedKmS = 0;
+  function updateLaunchPresentation() {
+    const altitudeKm = launchState.altitudeKm;
     if (launchState.aborted) {
       setLaunchPhase('aborted');
-    } else if (t < 3) {
+    } else if (altitudeKm < 10) {
       setLaunchPhase('liftoff');
-      const p = t / 3;
-      altitudeKm = 10 * p * p;
-      speedKmS = .25 * p;
-    } else if (t < 15) {
+    } else if (altitudeKm < 100) {
       setLaunchPhase('atmospheric-ascent');
-      const p = (t - 3) / 12;
-      altitudeKm = 10 + 90 * p;
-      speedKmS = .25 + 2.25 * p;
-    } else if (t < 30) {
+    } else if (altitudeKm < 200 || launchState.speedKmS < 7.79) {
       setLaunchPhase('orbital-insertion');
-      const p = (t - 15) / 15;
-      altitudeKm = 100 + 100 * p;
-      speedKmS = 2.5 + 5.29 * p;
     } else {
       setLaunchPhase('stable-leo');
-      altitudeKm = 200;
-      speedKmS = 7.79;
     }
-    launchState.altitudeKm = altitudeKm;
-    launchState.speedKmS = speedKmS;
     launchState.radiusKm = 6371 + altitudeKm;
+    launchState.fuelFraction = flightModel.propellantMassKg > 0 ? launchState.fuelKg / flightModel.propellantMassKg : 0;
+    launchState.throttle = throttle;
     updateSkyGradient(altitudeKm);
     launchState.tracePointCount = launchState.started ? Math.max(1, Math.floor(launchState.elapsed * 10)) : 0;
     rocketRoot.position.y = launchBaseY + altitudeKm * 1000 * visualScale;
     camera.setTarget(new BABYLON.Vector3(rocketRoot.position.x, rocketRoot.position.y + rocketHeight * .52, rocketRoot.position.z));
     camera.radius = Math.max(150, rocketHeight * 3);
   }
+  function integrateFlightDynamics(deltaSeconds) {
+    const altitudeM = launchState.altitudeKm * 1000;
+    const densityRatio = Math.exp(-altitudeM / 8500);
+    const vacuumBlend = BABYLON.Scalar.Clamp(altitudeM / 100000, 0, 1);
+    const baseThrust = flightModel.thrustSeaLevelN + (flightModel.thrustVacuumN - flightModel.thrustSeaLevelN) * vacuumBlend;
+    const coreThrust = flightModel.coreStageThrustSeaLevelN ? flightModel.coreStageThrustSeaLevelN * (.92 + .08 * vacuumBlend) : baseThrust;
+    const upperThrust = flightModel.upperStageThrustVacuumN || coreThrust;
+    const upperStageActive = launchState.elapsed >= (flightModel.upperStageStartS || Infinity);
+    const stageThrust = upperStageActive ? upperThrust : launchState.elapsed >= (flightModel.boosterSeparationS || Infinity) ? coreThrust : baseThrust;
+    const commandedThrust = stageThrust * throttle;
+    const nominalIsp = flightModel.specificImpulseSeaLevelS + (flightModel.specificImpulseVacuumS - flightModel.specificImpulseSeaLevelS) * vacuumBlend;
+    const isp = upperStageActive ? (flightModel.upperStageSpecificImpulseS || nominalIsp) : nominalIsp;
+    const mass = Math.max(flightModel.dryMassKg, launchState.massKg);
+    const massFlow = commandedThrust > 0 ? commandedThrust / (isp * gravityConstant) : 0;
+    const fuelBurn = Math.min(launchState.fuelKg, massFlow * deltaSeconds);
+    const actualThrust = massFlow > 0 && fuelBurn > 0 ? commandedThrust * (fuelBurn / (massFlow * deltaSeconds)) : 0;
+    launchState.fuelKg = Math.max(0, launchState.fuelKg - fuelBurn);
+    launchState.massKg = Math.max(flightModel.dryMassKg, flightModel.dryMassKg + launchState.fuelKg - launchState.jettisonedMassKg);
+    launchState.fuelBurnKgS = deltaSeconds > 0 ? fuelBurn / deltaSeconds : 0;
+    const gravity = gravityConstant * Math.pow(6371 / Math.max(6371, 6371 + launchState.altitudeKm), 2);
+    const thrustAcceleration = actualThrust / Math.max(1, launchState.massKg);
+    const dragAcceleration = Math.min(12, .000004 * Math.pow(launchState.speedKmS * 1000, 2) * densityRatio);
+    const netAcceleration = thrustAcceleration - gravity - dragAcceleration;
+    launchState.accelerationMps2 = netAcceleration;
+    launchState.accelerationG = netAcceleration / gravityConstant;
+    if (altitudeM < 100000) {
+      launchState.speedKmS = Math.max(0, launchState.speedKmS + netAcceleration * deltaSeconds / 1000);
+      launchState.altitudeKm += launchState.speedKmS * deltaSeconds;
+    } else {
+      const horizontalAcceleration = Math.max(0, thrustAcceleration) * .92;
+      launchState.speedKmS = Math.min(7.79, launchState.speedKmS + horizontalAcceleration * deltaSeconds / 1000);
+      const verticalVelocityKmS = Math.max(0, launchState.speedKmS * .08 - (altitudeM - 100000) / 100000 * .4);
+      launchState.altitudeKm += verticalVelocityKmS * deltaSeconds;
+    }
+    if (launchState.altitudeKm >= 200 && launchState.speedKmS >= 7.79) {
+      launchState.altitudeKm = 200;
+      launchState.speedKmS = 7.79;
+    }
+    updateLaunchPresentation();
+  }
   function startLaunch() {
-    if (launchState.started && !launchState.aborted) return false;
+    if (launchState.started) return false;
     launchState.started = true;
     launchState.aborted = false;
     launchState.elapsed = 0;
-    launchState.tracePointCount = 0;
+    launchState.altitudeKm = 0;
+    launchState.speedKmS = 0;
+    launchState.fuelKg = flightModel.propellantMassKg;
+    launchState.massKg = flightModel.initialMassKg;
+    launchState.jettisonedMassKg = 0;
+    launchState.accelerationMps2 = 0;
+    launchState.accelerationG = 0;
+    launchState.fuelBurnKgS = 0;
+    launchState.separationCount = 0;
+    launchState.separatedComponentIds = [];
     setLaunchPhase('liftoff');
-    applyLaunchTrajectory();
+    updateLaunchPresentation();
     return true;
   }
   function abortLaunch() {
     if (!launchState.started || launchState.phase === 'stable-leo' || launchState.phase === 'aborted') return false;
     launchState.aborted = true;
-    applyLaunchTrajectory();
+    updateLaunchPresentation();
     return true;
   }
+  function setThrottle(percent) {
+    throttle = BABYLON.Scalar.Clamp(Number(percent) / 100, 0, 1);
+    launchState.throttle = throttle;
+    return throttle;
+  }
   function stepLaunch(deltaSeconds) {
-    if (!launchState.started || launchState.aborted || launchState.phase === 'stable-leo') return {...launchState};
-    launchState.elapsed += Math.max(0, Number(deltaSeconds) || 0);
-    applyLaunchTrajectory();
+    const delta = Math.max(0, Number(deltaSeconds) || 0);
+    if (!launchState.started || launchState.aborted) {
+      stepSeparatedComponents(delta);
+      return {...launchState};
+    }
+    if (launchState.phase === 'stable-leo') {
+      launchState.accelerationMps2 = 0;
+      launchState.accelerationG = 0;
+      launchState.fuelBurnKgS = 0;
+      stepSeparatedComponents(delta);
+      return {...launchState};
+    }
+    launchState.elapsed += delta;
+    integrateFlightDynamics(delta);
+    applyLaunchSeparations();
+    stepSeparatedComponents(delta);
     return {...launchState};
   }
   function onLaunchPhaseChange(callback) {
@@ -401,6 +521,9 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     stepLaunch,
     onLaunchPhaseChange,
     getLaunchState: () => ({...launchState}),
+    setThrottle,
+    flightModel,
+    getSeparatedComponents: () => [...separatedStates.keys()],
     visualScale,
     sourceReference,
     dispose() {

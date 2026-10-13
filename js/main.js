@@ -44,6 +44,10 @@ const telemetryAltitudeNode = document.getElementById('telemetryAltitude');
 const telemetrySpeedNode = document.getElementById('telemetrySpeed');
 const telemetryRadiusNode = document.getElementById('telemetryRadius');
 const telemetryTraceNode = document.getElementById('telemetryTrace');
+const telemetryFuelNode = document.getElementById('telemetryFuel');
+const telemetryAccelerationNode = document.getElementById('telemetryAcceleration');
+const launchThrottleNode = document.getElementById('launchThrottle');
+const launchThrottleValueNode = document.getElementById('launchThrottleValue');
 const groundLaunchButtonNode = document.getElementById('groundLaunchButton');
 const abortGroundLaunchButtonNode = document.getElementById('abortGroundLaunchButton');
 const launchControlStatusNode = document.getElementById('launchControlStatus');
@@ -399,10 +403,14 @@ function updateFlightTelemetry() {
     telemetrySpeedNode.textContent = `${state.speedKmS.toFixed(3)} km/s`;
     telemetryRadiusNode.textContent = `${state.radiusKm.toFixed(1)} km`;
     telemetryTraceNode.textContent = `${state.tracePointCount} points`;
-    groundLaunchButtonNode.disabled = state.started && !state.aborted;
+    telemetryFuelNode.textContent = `${Math.max(0, state.fuelKg).toFixed(0)} kg`;
+    telemetryAccelerationNode.textContent = `${state.accelerationG.toFixed(2)} g`;
+    launchThrottleNode.value = String(Math.round(state.throttle * 100));
+    launchThrottleValueNode.textContent = `${Math.round(state.throttle * 100)}%`;
+    groundLaunchButtonNode.disabled = state.started;
     abortGroundLaunchButtonNode.disabled = !state.started || state.aborted || state.phase === 'stable-leo';
     groundLaunchButtonNode.textContent = state.phase === 'stable-leo' ? 'LEO achieved' : state.aborted ? 'Launch aborted' : state.started ? 'Launch in progress' : 'Begin ground launch';
-    launchControlStatusNode.textContent = state.phase === 'prelaunch' ? 'Launch scene ready · vehicle held on launchpad.' : state.phase === 'stable-leo' ? 'Stable 200 km LEO presentation state achieved.' : state.phase === 'aborted' ? 'Launch aborted · vehicle state frozen.' : `Ground launch active · ${state.phase.replaceAll('-', ' ')}.`;
+    launchControlStatusNode.textContent = state.phase === 'prelaunch' ? `Launch scene ready · ${Math.round(activeLaunchScene.flightModel.initialMassKg / 1000)} t liftoff mass · ${activeLaunchScene.flightModel.engines}${activeLaunchScene.flightModel.approximate ? ' · approximate model' : ''}.` : state.phase === 'stable-leo' ? `Stable 200 km LEO presentation state achieved · ${state.separationCount} separation${state.separationCount === 1 ? '' : 's'}.` : state.phase === 'aborted' ? `Launch aborted · ${state.separationCount} separation${state.separationCount === 1 ? '' : 's'} completed.` : `Ground launch active · ${state.phase.replaceAll('-', ' ')} · ${state.separationCount} separation${state.separationCount === 1 ? '' : 's'}.`;
     telemetryNoteNode.textContent = 'Ground-launch scene camera follows the selected vehicle. The existing telemetry panel is reused for launch control and live state.';
     flightView.update(state);
     return;
@@ -420,6 +428,12 @@ function updateFlightTelemetry() {
   flightView.update(state);
   telemetryNoteNode.textContent = state.phase === 'stable-leo' ? 'Real crew-cabin camera view. Earth and vehicle attitude are rendered from the live Babylon camera.' : 'Real crew-cabin camera view. Forward window follows the live vehicle attitude.';
 }
+
+launchThrottleNode.addEventListener('input', event => {
+  const percent = Number(event.target.value) || 0;
+  launchThrottleValueNode.textContent = `${percent}%`;
+  if (activeLaunchScene) activeLaunchScene.setThrottle(percent);
+});
 
 groundLaunchButtonNode.addEventListener('click', () => {
   if (!activeLaunchScene) return;
