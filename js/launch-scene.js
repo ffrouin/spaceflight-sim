@@ -6,7 +6,7 @@
 export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceReference}) {
   const engine = new BABYLON.Engine(canvas, true, {preserveDrawingBuffer: true, stencil: true}, true);
   const scene = new BABYLON.Scene(engine);
-  scene.clearColor = new BABYLON.Color4(.015, .025, .04, 1);
+  scene.clearColor = new BABYLON.Color4(.003, .008, .02, 1);
   scene.metadata = {
     sceneType: 'ground-launch-scene',
     platformId: platform?.id || null,
@@ -15,6 +15,49 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     sourceReference
   };
 
+  BABYLON.Effect.ShadersStore.launchSkyGradientVertexShader = `
+    precision highp float;
+    attribute vec3 position;
+    uniform mat4 worldViewProjection;
+    varying vec3 vDirection;
+    void main(void) {
+      vDirection = normalize(position);
+      gl_Position = worldViewProjection * vec4(position, 1.0);
+    }
+  `;
+  BABYLON.Effect.ShadersStore.launchSkyGradientFragmentShader = `
+    precision highp float;
+    uniform float spaceFactor;
+    varying vec3 vDirection;
+    void main(void) {
+      float elevation = clamp(vDirection.y * 0.5 + 0.5, 0.0, 1.0);
+      vec3 topBlue = vec3(0.004, 0.035, 0.15);
+      vec3 horizonBlue = vec3(0.025, 0.22, 0.62);
+      vec3 lowerBlue = vec3(0.06, 0.34, 0.78);
+      vec3 color = mix(horizonBlue, topBlue, smoothstep(0.38, 0.72, elevation));
+      color = mix(lowerBlue, color, smoothstep(0.0, 0.32, elevation));
+      color = mix(color, vec3(0.001, 0.003, 0.012), spaceFactor);
+      gl_FragColor = vec4(color, 1.0);
+    }
+  `;
+  const skyGradientMaterial = new BABYLON.ShaderMaterial('launch earth sky gradient material', scene, {vertex: 'launchSkyGradient', fragment: 'launchSkyGradient'}, {attributes: ['position'], uniforms: ['worldViewProjection', 'spaceFactor']});
+  skyGradientMaterial.backFaceCulling = false;
+  skyGradientMaterial.disableDepthWrite = true;
+  skyGradientMaterial.setFloat('spaceFactor', 0);
+  const skyGradientLayer = BABYLON.MeshBuilder.CreateSphere('launch earth sky gradient', {diameter: 150_000, segments: 32, sideOrientation: BABYLON.Mesh.BACKSIDE}, scene);
+  skyGradientLayer.material = skyGradientMaterial;
+  skyGradientLayer.isPickable = false;
+  skyGradientLayer.infiniteDistance = true;
+  skyGradientLayer.renderingGroupId = 0;
+  const skyGradientState = {altitudeKm: 0, spaceFactor: 0};
+  function updateSkyGradient(altitudeKm) {
+    const factor = BABYLON.Scalar.Clamp((altitudeKm - 15) / 85, 0, 1);
+    skyGradientState.altitudeKm = altitudeKm;
+    skyGradientState.spaceFactor = factor;
+    skyGradientMaterial.setFloat('spaceFactor', factor);
+    scene.clearColor = new BABYLON.Color4(.001, .003, .012, 1);
+  }
+  updateSkyGradient(0);
   const camera = new BABYLON.ArcRotateCamera(
     'launch scene camera', -Math.PI * .68, Math.PI * .34, 220,
     new BABYLON.Vector3(0, 35, 0), scene
@@ -22,7 +65,7 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
   camera.lowerRadiusLimit = 55;
   camera.upperRadiusLimit = 700;
   camera.lowerBetaLimit = .08;
-  camera.upperBetaLimit = Math.PI * .47;
+  camera.upperBetaLimit = Math.PI * .49;
   camera.minZ = .05;
   camera.maxZ = 3000;
   camera.attachControl(canvas, true);
@@ -242,12 +285,90 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
   camera.target = new BABYLON.Vector3(0, 20 + rocketHeight * .52, 0);
   camera.radius = Math.max(150, rocketHeight * 2.5);
   camera.alpha = -Math.PI * .68;
-  camera.beta = Math.PI * .34;
-  camera.maxZ = atmosphereRadiusScene * 1.25;
+  camera.beta = Math.PI * .46;
+  camera.maxZ = atmosphereRadiusScene * 1.4;
   const minimumCameraGroundClearance = 1.5;
+  const launchBaseY = rocketRoot.position.y;
+  const launchState = {
+    phase: 'prelaunch',
+    elapsed: 0,
+    altitudeKm: 0,
+    speedKmS: 0,
+    radiusKm: 6371,
+    tracePointCount: 0,
+    started: false,
+    aborted: false
+  };
+  const launchPhaseCallbacks = new Set();
+  function setLaunchPhase(phase) {
+    if (launchState.phase === phase) return;
+    launchState.phase = phase;
+    launchPhaseCallbacks.forEach(callback => callback(phase, {...launchState}));
+  }
+  function applyLaunchTrajectory() {
+    const t = launchState.elapsed;
+    let altitudeKm = 0;
+    let speedKmS = 0;
+    if (launchState.aborted) {
+      setLaunchPhase('aborted');
+    } else if (t < 3) {
+      setLaunchPhase('liftoff');
+      const p = t / 3;
+      altitudeKm = 10 * p * p;
+      speedKmS = .25 * p;
+    } else if (t < 15) {
+      setLaunchPhase('atmospheric-ascent');
+      const p = (t - 3) / 12;
+      altitudeKm = 10 + 90 * p;
+      speedKmS = .25 + 2.25 * p;
+    } else if (t < 30) {
+      setLaunchPhase('orbital-insertion');
+      const p = (t - 15) / 15;
+      altitudeKm = 100 + 100 * p;
+      speedKmS = 2.5 + 5.29 * p;
+    } else {
+      setLaunchPhase('stable-leo');
+      altitudeKm = 200;
+      speedKmS = 7.79;
+    }
+    launchState.altitudeKm = altitudeKm;
+    launchState.speedKmS = speedKmS;
+    launchState.radiusKm = 6371 + altitudeKm;
+    updateSkyGradient(altitudeKm);
+    launchState.tracePointCount = launchState.started ? Math.max(1, Math.floor(launchState.elapsed * 10)) : 0;
+    rocketRoot.position.y = launchBaseY + altitudeKm * 1000 * visualScale;
+    camera.setTarget(new BABYLON.Vector3(rocketRoot.position.x, rocketRoot.position.y + rocketHeight * .52, rocketRoot.position.z));
+    camera.radius = Math.max(150, rocketHeight * 3);
+  }
+  function startLaunch() {
+    if (launchState.started && !launchState.aborted) return false;
+    launchState.started = true;
+    launchState.aborted = false;
+    launchState.elapsed = 0;
+    launchState.tracePointCount = 0;
+    setLaunchPhase('liftoff');
+    applyLaunchTrajectory();
+    return true;
+  }
+  function abortLaunch() {
+    if (!launchState.started || launchState.phase === 'stable-leo' || launchState.phase === 'aborted') return false;
+    launchState.aborted = true;
+    applyLaunchTrajectory();
+    return true;
+  }
+  function stepLaunch(deltaSeconds) {
+    if (!launchState.started || launchState.aborted || launchState.phase === 'stable-leo') return {...launchState};
+    launchState.elapsed += Math.max(0, Number(deltaSeconds) || 0);
+    applyLaunchTrajectory();
+    return {...launchState};
+  }
+  function onLaunchPhaseChange(callback) {
+    if (typeof callback === 'function') launchPhaseCallbacks.add(callback);
+    return () => launchPhaseCallbacks.delete(callback);
+  }
   scene.onBeforeRenderObservable.add(() => {
     if (camera.globalPosition.y < minimumCameraGroundClearance) {
-      camera.beta = Math.min(camera.beta, Math.PI * .46);
+      camera.beta = Math.min(camera.beta, Math.PI * .48);
     }
   });
 
@@ -265,11 +386,21 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     atmosphereShell,
     lowerAtmosphereShell,
     atmosphereLayer,
+    skyGradientLayer,
+    skyGradientMaterial,
+    skyGradientState,
+    updateSkyGradient,
     atmosphereTopM,
     lowerAtmosphereM,
     atmosphereRadiusScene,
     lowerAtmosphereRadiusScene,
     atmosphereToRocketHeightRatio: atmosphereTopM / Math.max(vehicle?.heightM || 1, 1),
+    launchState,
+    startLaunch,
+    abortLaunch,
+    stepLaunch,
+    onLaunchPhaseChange,
+    getLaunchState: () => ({...launchState}),
     visualScale,
     sourceReference,
     dispose() {

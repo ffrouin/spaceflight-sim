@@ -44,6 +44,9 @@ const telemetryAltitudeNode = document.getElementById('telemetryAltitude');
 const telemetrySpeedNode = document.getElementById('telemetrySpeed');
 const telemetryRadiusNode = document.getElementById('telemetryRadius');
 const telemetryTraceNode = document.getElementById('telemetryTrace');
+const groundLaunchButtonNode = document.getElementById('groundLaunchButton');
+const abortGroundLaunchButtonNode = document.getElementById('abortGroundLaunchButton');
+const launchControlStatusNode = document.getElementById('launchControlStatus');
 const telemetryNoteNode = document.getElementById('telemetryNote');
 const inspectCrewCameraNode = document.getElementById('inspectCrewCamera');
 const crewOrientationControlsNode = document.getElementById('crewOrientationControls');
@@ -386,7 +389,24 @@ function prepareLaunchEnvironment() {
   statusNode.textContent = 'launch frame initialized · simulation clock 1× real time · ground to 100 km atmosphere boundary';
 }
 
+let activeLaunchScene = null;
 function updateFlightTelemetry() {
+  if (activeLaunchScene) {
+    const state = activeLaunchScene.getLaunchState();
+    telemetryStateNode.textContent = state.phase.replaceAll('-', ' ').toUpperCase();
+    telemetryTimeNode.textContent = `${state.elapsed.toFixed(1)} s`;
+    telemetryAltitudeNode.textContent = `${Math.max(0, state.altitudeKm).toFixed(1)} km`;
+    telemetrySpeedNode.textContent = `${state.speedKmS.toFixed(3)} km/s`;
+    telemetryRadiusNode.textContent = `${state.radiusKm.toFixed(1)} km`;
+    telemetryTraceNode.textContent = `${state.tracePointCount} points`;
+    groundLaunchButtonNode.disabled = state.started && !state.aborted;
+    abortGroundLaunchButtonNode.disabled = !state.started || state.aborted || state.phase === 'stable-leo';
+    groundLaunchButtonNode.textContent = state.phase === 'stable-leo' ? 'LEO achieved' : state.aborted ? 'Launch aborted' : state.started ? 'Launch in progress' : 'Begin ground launch';
+    launchControlStatusNode.textContent = state.phase === 'prelaunch' ? 'Launch scene ready · vehicle held on launchpad.' : state.phase === 'stable-leo' ? 'Stable 200 km LEO presentation state achieved.' : state.phase === 'aborted' ? 'Launch aborted · vehicle state frozen.' : `Ground launch active · ${state.phase.replaceAll('-', ' ')}.`;
+    telemetryNoteNode.textContent = 'Ground-launch scene camera follows the selected vehicle. The existing telemetry panel is reused for launch control and live state.';
+    flightView.update(state);
+    return;
+  }
   const state = rocketSystem.getLaunchState?.();
   if (!state) return;
   telemetryStateNode.textContent = state.phase.replaceAll('-', ' ').toUpperCase();
@@ -400,6 +420,19 @@ function updateFlightTelemetry() {
   flightView.update(state);
   telemetryNoteNode.textContent = state.phase === 'stable-leo' ? 'Real crew-cabin camera view. Earth and vehicle attitude are rendered from the live Babylon camera.' : 'Real crew-cabin camera view. Forward window follows the live vehicle attitude.';
 }
+
+groundLaunchButtonNode.addEventListener('click', () => {
+  if (!activeLaunchScene) return;
+  activeLaunchScene.startLaunch();
+  statusNode.textContent = 'ground launch initiated · ascent toward 100 km atmosphere boundary';
+  updateFlightTelemetry();
+});
+abortGroundLaunchButtonNode.addEventListener('click', () => {
+  if (!activeLaunchScene) return;
+  activeLaunchScene.abortLaunch();
+  statusNode.textContent = 'ground launch aborted';
+  updateFlightTelemetry();
+});
 
 function renderCrewTrackingFrame() {
   const previousCamera = scene.activeCamera;
@@ -503,6 +536,15 @@ launchButtonNode.addEventListener('click', () => {
     });
     window.__SELECTED_LAUNCH_PLATFORM = launchPlatform;
     window.__SELECTED_LAUNCH_VEHICLE = launchVehicle;
+    activeLaunchScene = launchScene;
+    flightTelemetryNode.classList.remove('hidden');
+    timeControlPanelNode.classList.remove('hidden');
+    groundLaunchButtonNode.disabled = false;
+    abortGroundLaunchButtonNode.disabled = true;
+    inspectCrewCameraNode.disabled = true;
+    telemetryNoteNode.textContent = 'Ground-launch scene camera follows the selected vehicle. The existing telemetry panel is reused for launch control and live state.';
+    flightView.resize();
+    updateFlightTelemetry();
     statusNode.textContent = `launch platform scene ready · ${launchPlatform?.name || 'selected site'}`;
     sceneTransitionNode.classList.add('revealing');
     window.__LAUNCH_SCENE_TRANSITION = 'ground-launch-scene-active';
@@ -559,10 +601,16 @@ window.__EARTH_WELCOME = {
 
 let lastFrameTime = performance.now();
 function renderFrame() {
-  if (scenePurged) return;
   const now = performance.now();
   const realDeltaSeconds = Math.min((now - lastFrameTime) / 1000, 0.05);
   lastFrameTime = now;
+  if (scenePurged) {
+    if (activeLaunchScene) {
+      activeLaunchScene.stepLaunch(realDeltaSeconds * launchTimeRate);
+      updateFlightTelemetry();
+    }
+    return;
+  }
   const simulationSeconds = clock.tick(realDeltaSeconds);
   celestial.update(simulationSeconds);
   rocketSystem.stepLaunch(realDeltaSeconds * (rocketSystem.getLaunchState?.() ? launchTimeRate : 1));
