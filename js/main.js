@@ -44,6 +44,14 @@ const telemetryRadiusNode = document.getElementById('telemetryRadius');
 const telemetryTraceNode = document.getElementById('telemetryTrace');
 const telemetryNoteNode = document.getElementById('telemetryNote');
 const inspectCrewCameraNode = document.getElementById('inspectCrewCamera');
+const crewOrientationControlsNode = document.getElementById('crewOrientationControls');
+const crewYawNode = document.getElementById('crewYaw');
+const crewPitchNode = document.getElementById('crewPitch');
+const crewRollNode = document.getElementById('crewRoll');
+const crewYawValueNode = document.getElementById('crewYawValue');
+const crewPitchValueNode = document.getElementById('crewPitchValue');
+const crewRollValueNode = document.getElementById('crewRollValue');
+const resetCrewOrientationNode = document.getElementById('resetCrewOrientation');
 const flightViewCanvas = document.getElementById('flightViewCanvas');
 const telemetryHandleNode = document.getElementById('telemetryHandle');
 const timeControlPanelNode = document.getElementById('timeControlPanel');
@@ -253,6 +261,42 @@ const crewCabinCamera = new BABYLON.FreeCamera('crew cabin camera · main Babylo
 crewCabinCamera.minZ = .001;
 crewCabinCamera.fov = .82;
 let inspectingCrewCamera = false;
+const crewCameraOrientation = {yawDeg: 0, pitchDeg: 0, rollDeg: 0};
+function updateCrewOrientationLabels() {
+  crewYawValueNode.textContent = `${crewCameraOrientation.yawDeg}°`;
+  crewPitchValueNode.textContent = `${crewCameraOrientation.pitchDeg}°`;
+  crewRollValueNode.textContent = `${crewCameraOrientation.rollDeg}°`;
+}
+function applyCrewCameraOrientation() {
+  if (!crewCabinCamera.rotationQuaternion) return;
+  const offset = BABYLON.Quaternion.RotationYawPitchRoll(
+    BABYLON.Tools.ToRadians(crewCameraOrientation.yawDeg),
+    BABYLON.Tools.ToRadians(crewCameraOrientation.pitchDeg),
+    BABYLON.Tools.ToRadians(crewCameraOrientation.rollDeg)
+  );
+  crewCabinCamera.rotationQuaternion = crewCabinCamera.rotationQuaternion.multiply(offset);
+}
+function setCrewOrientation(axis, value) {
+  crewCameraOrientation[axis] = Number(value) || 0;
+  updateCrewOrientationLabels();
+  window.__CREW_CAMERA_ORIENTATION = {...crewCameraOrientation};
+}
+function resetCrewOrientation() {
+  crewCameraOrientation.yawDeg = 0;
+  crewCameraOrientation.pitchDeg = 0;
+  crewCameraOrientation.rollDeg = 0;
+  crewYawNode.value = '0';
+  crewPitchNode.value = '0';
+  crewRollNode.value = '0';
+  updateCrewOrientationLabels();
+  window.__CREW_CAMERA_ORIENTATION = {...crewCameraOrientation};
+}
+updateCrewOrientationLabels();
+window.__CREW_CAMERA_ORIENTATION = {...crewCameraOrientation};
+crewYawNode.addEventListener('input', event => setCrewOrientation('yawDeg', event.target.value));
+crewPitchNode.addEventListener('input', event => setCrewOrientation('pitchDeg', event.target.value));
+crewRollNode.addEventListener('input', event => setCrewOrientation('rollDeg', event.target.value));
+resetCrewOrientationNode.addEventListener('click', resetCrewOrientation);
 function setCrewCameraInspection(enabled) {
   inspectingCrewCamera = Boolean(enabled);
   if (inspectingCrewCamera) {
@@ -263,6 +307,7 @@ function setCrewCameraInspection(enabled) {
     celestial.nightGlow.setEnabled(false);
     celestial.earthClouds.setEnabled(false);
     inspectCrewCameraNode.textContent = 'Return to external flight camera';
+    crewOrientationControlsNode.classList.remove('hidden');
     statusNode.textContent = 'real crew cabin camera · main Babylon scene';
   } else {
     scene.activeCamera = camera;
@@ -272,6 +317,7 @@ function setCrewCameraInspection(enabled) {
     celestial.earthClouds.setEnabled(true);
     camera.attachControl(canvas, true);
     inspectCrewCameraNode.textContent = 'Inspect real crew camera';
+    crewOrientationControlsNode.classList.add('hidden');
     statusNode.textContent = 'external flight camera · rocket focus retained';
   }
 }
@@ -347,6 +393,7 @@ function updateFlightTelemetry() {
   telemetryRadiusNode.textContent = `${state.radiusKm.toFixed(1)} km`;
   telemetryTraceNode.textContent = `${rocketSystem.getFlightTrace?.().pointCount || 0} points`;
   rocketSystem.updateCrewCamera(crewCabinCamera, state);
+  applyCrewCameraOrientation();
   flightView.update(state);
   telemetryNoteNode.textContent = state.phase === 'stable-leo' ? 'Real crew-cabin camera view. Earth and vehicle attitude are rendered from the live Babylon camera.' : 'Real crew-cabin camera view. Forward window follows the live vehicle attitude.';
 }
