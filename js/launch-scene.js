@@ -21,6 +21,8 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
   );
   camera.lowerRadiusLimit = 55;
   camera.upperRadiusLimit = 700;
+  camera.lowerBetaLimit = .08;
+  camera.upperBetaLimit = Math.PI * .47;
   camera.minZ = .05;
   camera.maxZ = 3000;
   camera.attachControl(canvas, true);
@@ -34,8 +36,8 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
   sun.intensity = 2.2;
 
   const colors = {
-    ground: new BABYLON.Color3(.10, .14, .10),
-    soil: new BABYLON.Color3(.24, .20, .13),
+    ground: new BABYLON.Color3(.07, .095, .065),
+    soil: new BABYLON.Color3(.18, .145, .085),
     concrete: new BABYLON.Color3(.32, .35, .34),
     steel: new BABYLON.Color3(.25, .29, .30),
     darkSteel: new BABYLON.Color3(.08, .10, .11),
@@ -51,12 +53,19 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     result.diffuseColor = color;
     result.specularColor = options.specular || new BABYLON.Color3(.12, .14, .15);
     result.roughness = options.roughness ?? .78;
+    if (options.transparent) {
+      result.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+      result.useAlphaFromDiffuseTexture = false;
+    } else {
+      result.transparencyMode = BABYLON.Material.MATERIAL_OPAQUE;
+      result.useAlphaFromDiffuseTexture = false;
+    }
     if (options.emissive) result.emissiveColor = options.emissive;
     return result;
   }
 
-  const groundMaterial = material('launch landscape', colors.ground);
-  const soilMaterial = material('launch soil', colors.soil);
+  const groundMaterial = material('launch landscape', colors.ground, {roughness: 1, specular: new BABYLON.Color3(.008, .01, .008)});
+  const soilMaterial = material('launch soil', colors.soil, {roughness: 1, specular: new BABYLON.Color3(.006, .005, .003)});
   const concreteMaterial = material('launch concrete', colors.concrete);
   const steelMaterial = material('launch steel', colors.steel, {roughness: .6});
   const darkSteelMaterial = material('launch dark steel', colors.darkSteel);
@@ -65,10 +74,11 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
   const orangeMaterial = material('launch vehicle orange', colors.orange, {roughness: .52});
   const blackMaterial = material('launch vehicle black', colors.black);
 
-  const ground = BABYLON.MeshBuilder.CreateGround('launch landscape ground', {width: 1200, height: 1200, subdivisions: 8}, scene);
+  const groundExtentMultiplier = 100;
+  const ground = BABYLON.MeshBuilder.CreateGround('launch landscape ground', {width: 1200 * groundExtentMultiplier, height: 1200 * groundExtentMultiplier, subdivisions: 32}, scene);
   ground.material = groundMaterial;
   const apron = BABYLON.MeshBuilder.CreateBox('launch site soil apron', {width: 520, depth: 360, height: 2}, scene);
-  apron.position.y = -1;
+  apron.position.y = -.96;
   apron.material = soilMaterial;
 
   for (let i = 0; i < 14; i += 1) {
@@ -166,10 +176,45 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
   });
 
   const rocketHeight = Math.max(physicalHeight * visualScale, 1);
+  const atmosphereTopM = 100_000;
+  const lowerAtmosphereM = 12_000;
+  const atmosphereRadiusScene = atmosphereTopM * visualScale;
+  const lowerAtmosphereRadiusScene = lowerAtmosphereM * visualScale;
+  const atmosphereMaterial = material('launch atmosphere blue haze', new BABYLON.Color3(.08, .24, .62), {roughness: 1, transparent: true});
+  atmosphereMaterial.disableLighting = true;
+  atmosphereMaterial.emissiveColor = new BABYLON.Color3(.035, .12, .38);
+  atmosphereMaterial.alpha = .065;
+  atmosphereMaterial.backFaceCulling = false;
+  const atmosphereShell = BABYLON.MeshBuilder.CreateSphere('launch atmosphere 100 km boundary', {diameter: atmosphereRadiusScene * 2, segments: 32, sideOrientation: BABYLON.Mesh.BACKSIDE}, scene);
+  atmosphereShell.material = atmosphereMaterial;
+  atmosphereShell.isPickable = false;
+  atmosphereShell.metadata = {sceneRole: 'atmosphere-layer', physicalAltitudeM: atmosphereTopM, atmosphereToRocketHeightRatio: atmosphereTopM / Math.max(vehicle?.heightM || 1, 1)};
+  const lowerAtmosphereMaterial = material('launch lower atmosphere haze', new BABYLON.Color3(.12, .36, .8), {roughness: 1, transparent: true});
+  lowerAtmosphereMaterial.disableLighting = true;
+  lowerAtmosphereMaterial.emissiveColor = new BABYLON.Color3(.05, .18, .48);
+  lowerAtmosphereMaterial.alpha = .04;
+  lowerAtmosphereMaterial.backFaceCulling = false;
+  const lowerAtmosphereShell = BABYLON.MeshBuilder.CreateSphere('launch lower atmosphere 12 km layer', {diameter: lowerAtmosphereRadiusScene * 2, segments: 32, sideOrientation: BABYLON.Mesh.BACKSIDE}, scene);
+  lowerAtmosphereShell.material = lowerAtmosphereMaterial;
+  lowerAtmosphereShell.isPickable = false;
+  lowerAtmosphereShell.metadata = {sceneRole: 'lower-atmosphere-layer', physicalAltitudeM: lowerAtmosphereM, atmosphereToRocketHeightRatio: lowerAtmosphereM / Math.max(vehicle?.heightM || 1, 1)};
+
+  const atmosphereLayer = new BABYLON.Layer('launch atmosphere visual layer', null, scene, false);
+  atmosphereLayer.color = new BABYLON.Color4(.015, .12, .5, .18);
+  atmosphereLayer.texture = null;
+  atmosphereLayer.metadata = {sceneRole: 'atmosphere-layer', physicalAltitudeM: atmosphereTopM};
+
   camera.target = new BABYLON.Vector3(0, 20 + rocketHeight * .52, 0);
   camera.radius = Math.max(150, rocketHeight * 2.5);
   camera.alpha = -Math.PI * .68;
   camera.beta = Math.PI * .34;
+  camera.maxZ = atmosphereRadiusScene * 1.25;
+  const minimumCameraGroundClearance = 1.5;
+  scene.onBeforeRenderObservable.add(() => {
+    if (camera.globalPosition.y < minimumCameraGroundClearance) {
+      camera.beta = Math.min(camera.beta, Math.PI * .46);
+    }
+  });
 
   const launchScene = {
     engine,
@@ -178,6 +223,17 @@ export function createLaunchScene({BABYLON, canvas, platform, vehicle, sourceRef
     platform,
     vehicle,
     rocketParts,
+    ground,
+    groundExtentMultiplier,
+    minimumCameraGroundClearance,
+    atmosphereShell,
+    lowerAtmosphereShell,
+    atmosphereLayer,
+    atmosphereTopM,
+    lowerAtmosphereM,
+    atmosphereRadiusScene,
+    lowerAtmosphereRadiusScene,
+    atmosphereToRocketHeightRatio: atmosphereTopM / Math.max(vehicle?.heightM || 1, 1),
     visualScale,
     sourceReference,
     dispose() {

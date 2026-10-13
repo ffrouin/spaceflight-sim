@@ -507,6 +507,7 @@ launchButtonNode.addEventListener('click', () => {
     sceneTransitionNode.classList.add('revealing');
     window.__LAUNCH_SCENE_TRANSITION = 'ground-launch-scene-active';
     sceneTransitionNode.classList.remove('active', 'revealing');
+    sceneTransitionNode.style.transition = 'none';
     sceneTransitionNode.style.opacity = '0';
     launchTransitioning = false;
   }, 460);
