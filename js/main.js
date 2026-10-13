@@ -10,6 +10,7 @@ import { createRocketSystem } from './rocket-system.js';
 import { createFlightView } from './flight-view.js';
 import { createCelestialSystem } from './celestial-system.js';
 import { createSimulationClock } from './simulation-clock.js';
+import { createLaunchScene } from './launch-scene.js';
 
 const canvas = document.getElementById('renderCanvas');
 const sceneSurfaceNode = canvas.closest('.scene');
@@ -490,15 +491,24 @@ launchButtonNode.addEventListener('click', () => {
   sceneTransitionNode.classList.add('active');
   window.__LAUNCH_SCENE_TRANSITION = 'fading-out';
   window.setTimeout(() => {
+    const launchPlatform = launchWizard.getSelectedPlatform();
+    const launchVehicle = rocketSystem.getSelectedVehicle?.();
     disposeWelcomeLaunchPreparation();
     purgeThreeDScene();
-    statusNode.textContent = 'launch scene empty · ready to reload flight assets';
+    canvas.style.visibility = 'visible';
+    sceneSurfaceNode.classList.remove('empty');
+    const launchScene = createLaunchScene({
+      BABYLON, canvas, platform: launchPlatform, vehicle: launchVehicle,
+      sourceReference: 'https://www.ekathimerini.com/wp-content/uploads/2022/08/NASA-MOON-ROCKET-0-960x600.jpg'
+    });
+    window.__SELECTED_LAUNCH_PLATFORM = launchPlatform;
+    window.__SELECTED_LAUNCH_VEHICLE = launchVehicle;
+    statusNode.textContent = `launch platform scene ready · ${launchPlatform?.name || 'selected site'}`;
     sceneTransitionNode.classList.add('revealing');
-    window.__LAUNCH_SCENE_TRANSITION = 'empty-launch-scene-ready';
-    window.setTimeout(() => {
-      sceneTransitionNode.classList.remove('active', 'revealing');
-      launchTransitioning = false;
-    }, 460);
+    window.__LAUNCH_SCENE_TRANSITION = 'ground-launch-scene-active';
+    sceneTransitionNode.classList.remove('active', 'revealing');
+    sceneTransitionNode.style.opacity = '0';
+    launchTransitioning = false;
   }, 460);
 });
 
@@ -565,4 +575,9 @@ function renderFrame() {
 renderFrame();
 window.__SIMULATION_TIMER = window.setInterval(renderFrame, 1000 / 60);
 
-window.addEventListener('resize', () => { engine.resize(); flightView.resize(); });
+window.addEventListener('resize', () => {
+  if (!scenePurged) {
+    engine.resize();
+    flightView.resize();
+  }
+});
