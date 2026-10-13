@@ -12,6 +12,7 @@ import { createCelestialSystem } from './celestial-system.js';
 import { createSimulationClock } from './simulation-clock.js';
 
 const canvas = document.getElementById('renderCanvas');
+const sceneSurfaceNode = canvas.closest('.scene');
 const statusNode = document.getElementById('sceneStatus');
 const assetNode = document.getElementById('assetStatus');
 const errorNode = document.getElementById('error');
@@ -436,6 +437,26 @@ function disposeWelcomeLaunchPreparation() {
   window.__LAUNCH_SCENE_MEMORY_CLEANED = true;
 }
 
+function purgeThreeDScene() {
+  camera.detachControl(canvas);
+  for (const postProcess of scene.postProcesses.slice()) postProcess.dispose();
+  for (const mesh of scene.meshes.slice()) mesh.dispose(false, true);
+  for (const node of scene.transformNodes.slice()) node.dispose(false, true);
+  for (const light of scene.lights.slice()) light.dispose();
+  for (const activeCamera of scene.cameras.slice()) activeCamera.dispose();
+  for (const material of scene.materials.slice()) material.dispose(true, true);
+  scene.activeCamera = null;
+  canvas.style.visibility = 'hidden';
+  sceneSurfaceNode.classList.add('empty');
+  scenePurged = true;
+  window.__LAUNCH_SCENE_3D_OBJECT_COUNT = scene.meshes.length + scene.transformNodes.length + scene.lights.length + scene.cameras.length;
+  window.__LAUNCH_SCENE_3D_PURGED = true;
+  engine.clear(new BABYLON.Color4(0, 0, 0, 1), true, true);
+  engine.stopRenderLoop();
+  engine.dispose();
+}
+
+let scenePurged = false;
 function startLaunchSequence() {
   setLaunchTimeRate(1);
   prepareLaunchEnvironment();
@@ -470,9 +491,10 @@ launchButtonNode.addEventListener('click', () => {
   window.__LAUNCH_SCENE_TRANSITION = 'fading-out';
   window.setTimeout(() => {
     disposeWelcomeLaunchPreparation();
-    startLaunchSequence();
+    purgeThreeDScene();
+    statusNode.textContent = 'launch scene empty · ready to reload flight assets';
     sceneTransitionNode.classList.add('revealing');
-    window.__LAUNCH_SCENE_TRANSITION = 'launch-scene-active';
+    window.__LAUNCH_SCENE_TRANSITION = 'empty-launch-scene-ready';
     window.setTimeout(() => {
       sceneTransitionNode.classList.remove('active', 'revealing');
       launchTransitioning = false;
@@ -526,6 +548,7 @@ window.__EARTH_WELCOME = {
 
 let lastFrameTime = performance.now();
 function renderFrame() {
+  if (scenePurged) return;
   const now = performance.now();
   const realDeltaSeconds = Math.min((now - lastFrameTime) / 1000, 0.05);
   lastFrameTime = now;
